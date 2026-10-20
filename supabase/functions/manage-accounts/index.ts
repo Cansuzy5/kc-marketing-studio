@@ -23,8 +23,8 @@ export async function handle(req:Request,makeClient=createClient,env=(key:string
   if(body.action==="change-initial"){
    if(!member.must_change_password)return reply(400,{error:"บัญชีนี้ไม่อยู่ในขั้นตอนเปลี่ยนรหัสผ่านเริ่มต้น"});
    // Auth rejects reusing the current password. No password is stored in profiles/logs.
-   const changed=await caller.auth.updateUser({password:body.password});
-   if(changed.error)return reply(400,{error:"เปลี่ยนรหัสผ่านไม่สำเร็จ กรุณาใช้รหัสใหม่ที่ไม่ซ้ำรหัสเริ่มต้น"});
+   const changed=await admin.auth.admin.updateUserById(uid,{password:body.password});
+   if(changed.error)return reply(400,{error:"เปลี่ยนรหัสผ่านไม่สำเร็จ กรุณาลองอีกครั้ง"});
    const completed=await admin.rpc("complete_initial_password",{target:uid});
    if(completed.error)return reply(500,{error:"เปลี่ยนรหัสผ่านแล้ว แต่ยังเปิดสิทธิ์ไม่สำเร็จ กรุณาติดต่อผู้ดูแล"});
    return reply(200,{ok:true});
