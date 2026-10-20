@@ -1,0 +1,13 @@
+{
+  "name": "kc-marketing-studio",
+  "version": "0.1.0",
+  "private": true,
+  "description": "KC multi-business marketing workspace prototype",
+  "scripts": {
+    "dev": "node scripts/serve.cjs",
+    "build": "node scripts/check.cjs",
+    "test": "node tests/check.cjs && node tests/ads-check.cjs"
+  },
+  "engines": {"node": ">=22.14.0"},
+  "devDependencies": {"fake-indexeddb": "6.2.6", "jsdom": "27.0.1"}
+}
