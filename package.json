@@ -1,12 +1,12 @@
 {
   "name": "kc-marketing-studio",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "description": "KC marketing workspace with Supabase authentication, scoped data and audit history",
   "scripts": {
     "dev": "node scripts/serve.cjs",
     "build": "node scripts/check.cjs",
-    "test": "node tests/check.cjs && node tests/ads-check.cjs && node tests/cloud-check.cjs"
+    "test": "node tests/check.cjs && node tests/ads-check.cjs && node tests/cloud-check.cjs && node tests/leads-check.cjs"
   },
   "engines": {
     "node": ">=22.14.0"

@@ -1,0 +1,15 @@
+const {JSDOM}=require('jsdom'),{indexedDB}=require('fake-indexeddb'),fs=require('fs'),path=require('path'),assert=require('node:assert/strict');
+const root=path.resolve(__dirname,'../public'),html=fs.readFileSync(path.join(root,'index.html'),'utf8'),script=['cloud.js','ads.js','leads.js','app.js'].map(f=>fs.readFileSync(path.join(root,f),'utf8')).join('\n');
+const wait=async test=>{for(let i=0;i<150;i++){if(test())return;await new Promise(r=>setTimeout(r,10));}throw Error('Timed out');};
+(async()=>{
+ const dom=new JSDOM(html,{url:'https://example.test/?demo=1#results',runScripts:'outside-only'}),w=dom.window,d=w.document;
+ w.structuredClone=structuredClone;w.indexedDB=indexedDB;w.HTMLDialogElement.prototype.showModal=function(){this.open=true;};w.HTMLDialogElement.prototype.close=function(){this.open=false;};w.eval(script);
+ const q=s=>d.querySelector(s);await wait(()=>q('.lead-row'));assert.equal(d.querySelectorAll('.lead-row').length,6);assert.equal(q('.lead-money').textContent,'฿24,000');
+ q('[data-lead-filter="due"]').click();await wait(()=>d.querySelectorAll('.lead-row').length===2);
+ q('[data-lead-id="demo-lead-0"]').click();await wait(()=>q('#followup-form'));let f=q('#followup-form');f.elements.namedItem('status').value='ปิดการขายสำเร็จ';f.elements.namedItem('status').dispatchEvent(new w.Event('change'));f.elements.namedItem('value').value='6000';f.elements.namedItem('note').value='<script>confirmed</script>';f.dispatchEvent(new w.Event('submit',{cancelable:true}));await wait(()=>q('.lead-money')?.textContent==='฿30,000');
+ q('[data-lead-filter="all"]').click();await wait(()=>d.querySelectorAll('.lead-row').length===6);q('[data-lead-id="demo-lead-0"]').click();await wait(()=>q('#followup-form'));assert(q('.lead-timeline').textContent.includes('<script>confirmed</script>'));assert.equal(q('.lead-timeline').querySelectorAll('script').length,0);
+ q('#lead-trash').click();await wait(()=>d.querySelectorAll('.lead-row').length===5);q('[data-lead-filter="trash"]').click();await wait(()=>d.querySelectorAll('.lead-row').length===1);q('[data-lead-id="demo-lead-0"]').click();await wait(()=>q('#lead-trash')?.textContent==='กู้คืนลูกค้า');q('#lead-trash').click();await wait(()=>d.querySelectorAll('.lead-row').length===0);
+ q('[data-lead-filter="all"]').click();await wait(()=>d.querySelectorAll('.lead-row').length===6);q('#lead-create').click();f=q('#lead-form');f.elements.namedItem('customer').value='Unknown source';f.elements.namedItem('source').value='ยังไม่ทราบ';f.dispatchEvent(new w.Event('submit',{cancelable:true}));await wait(()=>d.querySelectorAll('.lead-row').length===7);assert(q('#view').textContent.includes('ยืนยันที่มา 6'));assert(localStorageCheck(w));
+ console.log('PASS: source-linked totals, due filter, followup history, escaping, won totals, recoverable trash, unknown attribution excluded, demo persistence.');w.close();
+})().catch(e=>{console.error(e);process.exitCode=1;});
+function localStorageCheck(w){return JSON.parse(w.localStorage.getItem('kc-leads-demo-v1')).records.length===7;}

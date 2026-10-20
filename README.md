@@ -32,3 +32,9 @@ Set Auth Site URL to production and allow only intended redirects. Keep email co
 ## Demo photos
 
 [Pool / Unsplash](https://unsplash.com/pt-br/fotografias/casa-branca-moderna-com-piscina-e-palmeira-mCQ-ykj6tQk), [Solar / Pujanak, public domain](https://commons.wikimedia.org/wiki/File:Solar_panels_on_a_roof.jpg). Not actual KC properties.
+
+## Lead tracking
+
+Apply database/leads.sql once after schema.sql. It adds scoped leads and append-only followup records, with an invoker-rights transactional followup function. Verify with database/verify-leads.sql. Content-linked leads must stay in the same unit; moving a content item with linked leads is rejected by the database. Lead unit reassignment is intentionally unavailable.
+
+Results show cumulative post metrics separately from opportunities. Only confirmed post attribution contributes to sales and funnel totals. Cost per paid lead divides spend by confirmed paid-source leads. Unknown sale values remain unavailable, not zero. Source attribution is manual, not causal proof. Lead contact information stays out of the public demo. The demo uses a separate local storage key.
