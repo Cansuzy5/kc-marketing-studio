@@ -12,6 +12,7 @@ begin
  select u.id,left(coalesce(nullif(u.raw_user_meta_data->>'display_name',''),u.email,''),200),
  coalesce(u.email,''),'pending',false
  from auth.users u where u.email_confirmed_at is not null and u.deleted_at is null
+ and not (coalesce(u.raw_app_meta_data,'{}'::jsonb) ? 'managed_by')
  and not exists(select 1 from public.members m where m.user_id=u.id)
  on conflict(user_id) do nothing;
  get diagnostics added=row_count;

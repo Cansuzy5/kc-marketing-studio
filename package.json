@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "node scripts/serve.cjs",
     "build": "node scripts/check.cjs",
-    "test": "node tests/check.cjs && node tests/ads-check.cjs && node tests/cloud-check.cjs && node tests/leads-check.cjs && node tests/multi-organic-check.cjs"
+    "test": "node tests/check.cjs && node tests/ads-check.cjs && node tests/cloud-check.cjs && node tests/leads-check.cjs && node tests/multi-organic-check.cjs && node tests/accounts-check.cjs"
   },
   "engines": {
     "node": ">=22.14.0"

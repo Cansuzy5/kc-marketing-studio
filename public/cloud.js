@@ -9,7 +9,7 @@ const KC = (() => {
  const check=r=>{if(r.error)throw Error(r.error.message);return r.data;};
  const roleLabel={admin:'ผู้ดูแลระบบ',marketing:'ทีมการตลาด',branch:'ประจำสาขา',pending:'รออนุมัติ'};
  function gate(message='') {q('.app').hidden=true;q('#auth-screen').hidden=false;q('#auth-message').textContent=message;}
- function clear(){if(typeof LeadUI!=='undefined')LeadUI.reset();tasks=[];rows=[];member=null;units=[];q('#view').replaceChildren();document.querySelectorAll('dialog[open]').forEach(d=>d.close());}
+ function clear(){if(q('#initial-password'))q('#initial-password').hidden=true;if(typeof LeadUI!=='undefined')LeadUI.reset();tasks=[];rows=[];member=null;units=[];q('#view').replaceChildren();document.querySelectorAll('dialog[open]').forEach(d=>d.close());}
  function snapshot(row){if(!row)return '<p>—</p>';if(row.customer||row.note){const labels={customer:'ลูกค้า',contact:'ช่องทางติดต่อ',need:'ความต้องการ',source:'ที่มา',attribution:'การยืนยันที่มา',status:'สถานะ',note:'ผลติดตาม',next_followup:'นัดถัดไป',sale_value:'ยอดปิดการขาย',owner:'ผู้ดูแล',consent:'ยินยอมให้ติดต่อ',deleted_at:'ย้ายลงถังขยะ'};return '<dl>'+Object.entries(labels).filter(([k])=>row[k]!==undefined).map(([k,label])=>'<dt>'+label+'</dt><dd>'+safe(row[k]??'—')+'</dd>').join('')+'</dl>';}const p=row.payload;if(!p)return '<p>หน้าที่: '+safe(roleLabel[row.role]||row.role)+' · '+(row.active?'เปิดใช้งาน':'ปิดใช้งาน')+'</p>';const fields={title:'ชื่องาน',campaign:'แคมเปญ',caption:'บรีฟ / แคปชัน',owner:'ผู้รับผิดชอบ',channel:'ช่องทาง',date:'วันเผยแพร่'};return '<dl>'+Object.entries(fields).map(([key,label])=>'<dt>'+label+'</dt><dd>'+safe(p[key]||'—')+'</dd>').join('')+'<dt>สถานะ</dt><dd>'+safe(STATUSES[p.status]||'—')+'</dd><dt>ไฟล์แนบ</dt><dd>'+safe((p.files||[]).map(f=>f.name).join(', ')||'—')+'</dd>'+Object.entries({approved:'งบอนุมัติ',spent:'ใช้จริง',views:'ยอดดู',replies:'ตอบกลับ',comments:'คอมเมนต์',clicks:'คลิก'}).map(([key,label])=>'<dt>'+label+'</dt><dd>'+safe(p.ads?.[key]??'—')+'</dd>').join('')+'</dl>';}
  function stamp(d){return new Date(d).toLocaleString('th-TH',{timeZone:'Asia/Bangkok'});}
  async function boot(){
@@ -25,7 +25,7 @@ const KC = (() => {
   q('#auth-form').onsubmit=authSubmit;
   q('#signup').onclick=()=>{q('#auth-name-field').hidden=false;q('#auth-title').textContent='ขอเข้าใช้งาน KC';q('#auth-submit').textContent='สมัครและยืนยันอีเมล';q('#auth-form').dataset.mode='signup';};
   q('#back-login').onclick=()=>{q('#auth-name-field').hidden=true;q('#auth-title').textContent='ยินดีต้อนรับกลับมา';q('#auth-submit').textContent='เข้าสู่ระบบ';q('#auth-form').dataset.mode='login';};
-  q('#forgot').onclick=async()=>{try{const email=q('#auth-email').value.trim();if(!email)throw Error('กรอกอีเมลก่อนครับ');check(await client.auth.resetPasswordForEmail(email,{redirectTo:location.origin+'/'}));q('#auth-message').textContent='หากอีเมลนี้ใช้งานได้ ระบบจะส่งลิงก์ตั้งรหัสผ่านให้ กรุณาตรวจกล่องจดหมาย';}catch(e){q('#auth-message').textContent=e.message;}};
+  q('#forgot').onclick=async()=>{try{const email=q('#auth-email').value.trim();if(!email.includes('@'))throw Error('บัญชีชื่อผู้ใช้ไม่มีอีเมลกู้รหัส กรุณาติดต่อผู้ดูแล');if(!email)throw Error('กรอกอีเมลก่อนครับ');check(await client.auth.resetPasswordForEmail(email,{redirectTo:location.origin+'/'}));q('#auth-message').textContent='หากอีเมลนี้ใช้งานได้ ระบบจะส่งลิงก์ตั้งรหัสผ่านให้ กรุณาตรวจกล่องจดหมาย';}catch(e){q('#auth-message').textContent=e.message;}};
   q('#signout').onclick=async()=>{const result=await client.auth.signOut();if(result.error){toast(result.error.message);return;}clear();gate();};
   q('#refresh-cloud').onclick=async()=>{try{await enter();toast('โหลดข้อมูลล่าสุดแล้ว');}catch(e){toast(e.message);}};
   q('#history-btn').onclick=()=>panel('history');q('#trash-btn').onclick=()=>panel('trash');q('#members-btn').onclick=()=>panel('members');
@@ -38,7 +38,7 @@ const KC = (() => {
   return true;
  }
  async function authSubmit(e){e.preventDefault();if(busy)return;busy=true;q('#auth-submit').disabled=true;
-  try{const email=q('#auth-email').value.trim(),password=q('#auth-password').value,mode=e.target.dataset.mode;
+  try{const login=q('#auth-email').value.trim().toLowerCase(),email=login.includes('@')?login:login+'@users.kc.invalid',password=q('#auth-password').value,mode=e.target.dataset.mode;
    if(mode==='signup'){if(password.length<10)throw Error('ตั้งรหัสผ่านอย่างน้อย 10 ตัวอักษร');check(await client.auth.signUp({email,password,options:{emailRedirectTo:location.origin+'/',data:{display_name:q('#auth-name').value.trim()}}}));q('#auth-message').textContent='ตรวจอีเมลเพื่อยืนยันบัญชี แล้วกลับมาเข้าสู่ระบบเพื่อขอสิทธิ์ใช้งาน';}
    else if(mode==='recovery'){if(password.length<10)throw Error('ตั้งรหัสผ่านอย่างน้อย 10 ตัวอักษร');check(await client.auth.updateUser({password}));recovery=false;q('#auth-form').dataset.mode='login';await enter();}
    else {session=check(await client.auth.signInWithPassword({email,password})).session;await enter();}
@@ -49,6 +49,7 @@ const KC = (() => {
   const user=check(await client.auth.getUser()).user;if(!user)throw Error('กรุณาเข้าสู่ระบบ');
   member=check(await client.from('members').select('*').eq('user_id',user.id).maybeSingle());
   if(!member){member=check(await client.from('members').insert({user_id:user.id,display_name:user.user_metadata?.display_name||user.email}).select().single());}
+  if(member.active&&member.must_change_password){await ManagedAccounts.changeInitial(client,enter);return;}
   if(!member.active||member.role==='pending'){clear();gate('ยืนยันตัวตนแล้ว บัญชีนี้กำลังรอผู้ดูแลอนุมัติสิทธิ์ กรุณาเข้าสู่ระบบอีกครั้งหลังอนุมัติ');return;}
   units=check(await client.from('units').select('*').order('bu_id'));
   await load();
@@ -105,9 +106,10 @@ const KC = (() => {
    }else{
     check(await client.rpc('sync_pending_members'));
     const people=check(await client.from('members').select('*').order('created_at'));
-    html='<p>สมาชิกใหม่จะปรากฏหลังยืนยันอีเมลแล้ว เปิดหน้านี้อีกครั้งเพื่อโหลดรายชื่อใหม่ เลือกหน้าที่และติ๊กเปิดใช้งานก่อนบันทึก บัญชีประจำสาขาเห็นเฉพาะหน่วยย่อยที่กำหนด</p>'+people.map(m=>`<form class="member-row" data-person="${m.user_id}"><b>${safe(m.display_name)}</b><small>${safe(m.email)}</small><label>หน้าที่<select name="role">${Object.entries(roleLabel).map(([r,label])=>`<option value="${r}" ${m.role===r?'selected':''}>${label}</option>`).join('')}</select></label><label>หน่วยย่อย<select name="unit"><option value="">ทุกหน่วย (ผู้ดูแล/การตลาด)</option>${units.map(u=>`<option value="${u.id}" ${u.id===m.unit_id?'selected':''}>${safe(BUS[u.bu_id].short+' · '+u.name)}</option>`).join('')}</select></label><label><input type="checkbox" name="active" ${m.active?'checked':''}>เปิดใช้งาน</label><button class="primary" ${m.user_id===member.user_id?'disabled':''}>บันทึกสิทธิ์</button></form>`).join('');
+    html=ManagedAccounts.markup(units)+'<p>สมาชิกใหม่จะปรากฏหลังยืนยันอีเมลแล้ว เปิดหน้านี้อีกครั้งเพื่อโหลดรายชื่อใหม่ เลือกหน้าที่และติ๊กเปิดใช้งานก่อนบันทึก บัญชีประจำสาขาเห็นเฉพาะหน่วยย่อยที่กำหนด</p>'+people.map(m=>`<form class="member-row" data-person="${m.user_id}"><b>${safe(m.display_name)}</b><small>${safe(m.username||m.email)}${m.must_change_password?' · ต้องเปลี่ยนรหัสผ่านครั้งแรก':''}</small><label>หน้าที่<select name="role">${Object.entries(roleLabel).map(([r,label])=>`<option value="${r}" ${m.role===r?'selected':''}>${label}</option>`).join('')}</select></label><label>หน่วยย่อย<select name="unit"><option value="">ทุกหน่วย (ผู้ดูแล/การตลาด)</option>${units.map(u=>`<option value="${u.id}" ${u.id===m.unit_id?'selected':''}>${safe(BUS[u.bu_id].short+' · '+u.name)}</option>`).join('')}</select></label><label><input type="checkbox" name="active" ${m.active?'checked':''}>เปิดใช้งาน</label><button class="primary" ${m.user_id===member.user_id?'disabled':''}>บันทึกสิทธิ์</button></form>`).join('');
    }
    q('#cloud-panel-body').innerHTML=html;
+   if(kind==='members')ManagedAccounts.bind(client,()=>panel('members'));
    document.querySelectorAll('[data-restore]').forEach(b=>b.onclick=async()=>{b.disabled=true;try{await trash(b.dataset.restore,Number(b.dataset.version),true);await load();render();await panel('trash');toast('กู้คืนงานแล้ว');}catch(e){toast(e.message);b.disabled=false;}});
    document.querySelectorAll('[data-person]').forEach(f=>f.onsubmit=async e=>{e.preventDefault();const role=f.elements.namedItem('role').value,unit=f.elements.namedItem('unit').value;if(role==='branch'&&!unit){toast('เลือกหน่วยย่อยสำหรับบัญชีประจำสาขา');return;}const button=f.querySelector('button');button.disabled=true;try{const saved=check(await client.from('members').update({role,unit_id:role==='branch'?unit:null,active:role!=='pending'&&f.elements.namedItem('active').checked}).eq('user_id',f.dataset.person).select().maybeSingle());if(!saved)throw Error('ไม่สามารถแก้สิทธิ์บัญชีนี้');toast('บันทึกสิทธิ์และประวัติแล้ว');}catch(e){toast(e.message);}finally{button.disabled=false;}});
   }catch(e){q('#cloud-panel-body').textContent=e.message;}

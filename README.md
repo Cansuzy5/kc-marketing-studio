@@ -46,3 +46,8 @@ Organic response counts are separate from paid advertising counts and remain edi
 
 Apply `database/member-directory.sql` after the existing schema. Opening Members refreshes the directory from email-confirmed Auth users, inserting inactive pending profiles only. Existing permissions remain unchanged. `database/verify-member-directory.sql` verifies the admin guard and pending isolation in a transaction that rolls back all fixtures. Users who have not confirmed email are excluded.
 
+
+## Administrator-created usernames
+Apply `database/managed-accounts.sql` and reapply `database/member-directory.sql`. Deploy `supabase/functions/manage-accounts/index.ts` as `manage-accounts` with platform legacy JWT verification off: the handler validates each caller with Auth getUser and an active admin profile before provisioning. Credentials are read only from the function environment. Public signup should be disabled in Auth settings. Existing email accounts continue working.
+
+Managed usernames map to an internal non-deliverable Auth identifier, not a verified external email. Admins choose initial passwords in the UI; no email is sent. Members must change their initial password, enforced by database RLS helpers until the service confirms completion. Passwords are never returned or included in the application audit log. Existing usernames are never overwritten/reset by create requests. Failed profile provisioning attempts clean up only the Auth user just created. Lost-password recovery for these usernames requires administrator assistance; email recovery is unavailable.
