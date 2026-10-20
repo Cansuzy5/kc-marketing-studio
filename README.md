@@ -38,3 +38,11 @@ Set Auth Site URL to production and allow only intended redirects. Keep email co
 Apply database/leads.sql once after schema.sql. It adds scoped leads and append-only followup records, with an invoker-rights transactional followup function. Verify with database/verify-leads.sql. Content-linked leads must stay in the same unit; moving a content item with linked leads is rejected by the database. Lead unit reassignment is intentionally unavailable.
 
 Results show cumulative post metrics separately from opportunities. Only confirmed post attribution contributes to sales and funnel totals. Cost per paid lead divides spend by confirmed paid-source leads. Unknown sale values remain unavailable, not zero. Source attribution is manual, not causal proof. Lead contact information stays out of the public demo. The demo uses a separate local storage key.
+# Content scope and response reporting
+
+Content can select multiple related BUs or all BUs. It remains one record, with one owning unit for permissions, files and lead ownership. Related BU selections do not expand branch access. Overall totals count each content once; budget breakdowns use the owning BU.
+
+Organic response counts are separate from paid advertising counts and remain editable without enabling Ads. Blank means not reported; zero means measured with no response. Enter Organic-only values to avoid double counting a platform's combined total.
+
+Apply `database/member-directory.sql` after the existing schema. Opening Members refreshes the directory from email-confirmed Auth users, inserting inactive pending profiles only. Existing permissions remain unchanged. `database/verify-member-directory.sql` verifies the admin guard and pending isolation in a transaction that rolls back all fixtures. Users who have not confirmed email are excluded.
+

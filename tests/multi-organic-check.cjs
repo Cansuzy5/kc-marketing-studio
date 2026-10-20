@@ -1,0 +1,12 @@
+const {JSDOM}=require('jsdom'),{indexedDB}=require('fake-indexeddb'),fs=require('fs'),assert=require('node:assert/strict');
+const wait=async f=>{for(let i=0;i<100;i++){if(f())return;await new Promise(r=>setTimeout(r,10));}throw Error('timeout');};
+const boot=()=>{const dom=new JSDOM(fs.readFileSync('public/index.html','utf8'),{url:'https://test.invalid/?demo=1#content',runScripts:'outside-only'}),w=dom.window;w.structuredClone=structuredClone;w.indexedDB=indexedDB;w.HTMLDialogElement.prototype.showModal=function(){this.open=true;};w.HTMLDialogElement.prototype.close=function(){this.open=false;};w.eval(['ads.js','app.js'].map(p=>fs.readFileSync('public/'+p,'utf8')).join('\n'));return dom;};
+(async()=>{let dom=boot(),d=dom.window.document;await wait(()=>d.querySelector('.content-card'));
+d.querySelector('[data-edit="demo-food"]').click();const f=n=>d.querySelector('#task-form').elements.namedItem(n);
+assert.equal(f('adEnabled').checked,false);assert.equal(f('organic_views').disabled,false);
+f('organic_views').value=700;f('organic_replies').value=0;f('organic_comments').value='';f('organicUpdated').value='2026-10-20';
+d.querySelector('#select-all-bus').click();d.querySelector('#task-form').dispatchEvent(new dom.window.Event('submit',{cancelable:true}));await wait(()=>!d.querySelector('#editor').open);
+for(const bu of [0,1,2,3]){d.querySelector(`[data-bu="${bu}"]`).click();assert.ok(d.querySelector('[data-edit="demo-food"]'));}
+d.querySelector('[data-view="ads"]').click();assert.ok(d.querySelector('.organic-stats').textContent.includes('700'));assert.equal(d.querySelectorAll('.organic-table [data-edit="demo-food"]').length,1);
+dom.window.close();dom=boot();d=dom.window.document;await wait(()=>d.querySelector('.content-card'));d.querySelector('[data-edit="demo-food"]').click();const ff=n=>d.querySelector('#task-form').elements.namedItem(n);
+assert.equal(ff('organic_views').value,'700');assert.equal(ff('organic_replies').value,'0');assert.equal(ff('organic_comments').value,'');assert.equal(d.querySelectorAll('[name="relatedBu"]:checked').length,4);assert.equal(ff('adEnabled').checked,false);ff('adEnabled').click();assert.equal(ff('organic_views').value,'700');ff('adEnabled').click();assert.equal(ff('organic_views').disabled,false);dom.window.close();console.log('PASS: organic without ads, zero vs missing, multi-BU filters, one record in totals, persistence, ads toggle preserves organic.');})().catch(e=>{console.error(e);process.exitCode=1;});
