@@ -1,6 +1,6 @@
 const {JSDOM}=require('jsdom'),fs=require('fs'),path=require('path'),assert=require('node:assert/strict');
 const root=path.resolve(__dirname,'../public'),html=fs.readFileSync(path.join(root,'index.html'),'utf8');
-const script=['accounts.js','cloud.js','ads.js','app.js'].map(f=>fs.readFileSync(path.join(root,f),'utf8')).join('\n');
+const script=['accounts.js','cloud.js','ads.js','planner.js','app.js'].map(f=>fs.readFileSync(path.join(root,f),'utf8')).join('\n');
 const wait=async test=>{for(let i=0;i<150;i++){if(test())return;await new Promise(r=>setTimeout(r,10));}throw Error('Timed out');};
 function boot(mode){
  const dom=new JSDOM(html,{url:'https://kc-test.example',runScripts:'outside-only'}),w=dom.window;let writes=0,conflict=false;
