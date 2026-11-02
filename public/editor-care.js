@@ -1,0 +1,12 @@
+'use strict';
+const EditorCare=(()=>{
+ let baseline='',installed=false;
+ const normalize=s=>String(s||'').normalize('NFC').trim().replace(/\s+/g,' ');
+ function fingerprint(){return JSON.stringify({fields:[...form.elements].filter(e=>e.name&&e.type!=='file').map(e=>[e.name,e.type==='checkbox'?e.checked:e.value]),files:draftFiles.map(f=>[f.path||f.url,f.name])});}
+ function dirty(){return !!baseline&&fingerprint()!==baseline;}
+ function canLeave(){return !dirty()||confirm('มีข้อมูลที่ยังไม่ได้บันทึก ต้องการทิ้งการแก้ไขนี้หรือไม่?');}
+ function owners(current){const el=field('owner');const people=typeof KC!=='undefined'&&!KC.demo?(KC.people?.()||[]):[];const names=new Map();for(const t of tasks){const n=normalize(t.owner);if(n)names.set(n.toLocaleLowerCase('th-TH'),n);}for(const p of people){const n=normalize(p.display_name);if(n)names.set(n.toLocaleLowerCase('th-TH'),n);}const value=normalize(current||el.value);if(value)names.set(value.toLocaleLowerCase('th-TH'),value);el.innerHTML='<option value="">ยังไม่มอบหมาย</option>'+[...names.values()].sort((a,b)=>a.localeCompare(b,'th')).map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join('')+'<option value="__add_owner__">＋ เพิ่มชื่อผู้รับผิดชอบ / ทีม</option>';el.value=value;el.dataset.previous=value;}
+ function setup(){if(installed)return;installed=true;const old=field('owner'),select=document.createElement('select');select.name='owner';select.setAttribute('aria-label','ผู้รับผิดชอบ');old.replaceWith(select);select.addEventListener('change',()=>{if(select.value!=='__add_owner__'){select.dataset.previous=select.value;return;}const raw=prompt('ชื่อผู้รับผิดชอบหรือทีม (ไม่เกิน 80 ตัวอักษร)');const n=normalize(raw);if(!n||n.length>80){select.value=select.dataset.previous||'';if(n.length>80)toast('ชื่อยาวเกิน 80 ตัวอักษร');return;}const existing=[...select.options].find(o=>normalize(o.value).toLocaleLowerCase('th-TH')===n.toLocaleLowerCase('th-TH'));if(existing)select.value=existing.value;else{select.add(new Option(n,n),select.options.length-1);select.value=n;}select.dataset.previous=select.value;});const hint=document.createElement('small');hint.className='form-hint';hint.textContent='เลือกจากสมาชิกที่คุณมีสิทธิ์เห็นและชื่อที่เคยใช้ในงาน · เพิ่มชื่อทีมได้';select.after(hint);window.addEventListener('beforeunload',e=>{if(document.querySelector('#editor').open&&dirty()){e.preventDefault();e.returnValue='';}});}
+ function loaded(t){owners(t?.owner||'');baseline=fingerprint();}
+ return {setup,loaded,dirty,canLeave,owners};
+})();

@@ -3,14 +3,14 @@ const KC = (() => {
  const demo = new URLSearchParams(location.search).get('demo') === '1';
  const url='https://rsxqdbygcbautctfuzlj.supabase.co';
  const key='sb_publishable_KAbo5KTqcPA2MbDoESvpmw_IYsDJoGQ';
- let client, member, session, units=[], rows=[], busy=false, recovery=false;
+ let client, member, session, units=[], rows=[], busy=false, recovery=false, people=[], fileTimer=null;
  const q=s=>document.querySelector(s);
  const safe=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const check=r=>{if(r.error)throw Error(r.error.message);return r.data;};
  const roleLabel={admin:'ผู้ดูแลระบบ',marketing:'ทีมการตลาด',branch:'ประจำสาขา',pending:'รออนุมัติ'};
  function gate(message='') {q('.app').hidden=true;q('#auth-screen').hidden=false;q('#auth-message').textContent=message;}
- function clear(){if(q('#initial-password'))q('#initial-password').hidden=true;if(typeof LeadUI!=='undefined')LeadUI.reset();tasks=[];rows=[];member=null;units=[];q('#view').replaceChildren();document.querySelectorAll('dialog[open]').forEach(d=>d.close());}
- function snapshot(row){if(!row)return '<p>—</p>';if(row.customer||row.note){const labels={customer:'ลูกค้า',contact:'ช่องทางติดต่อ',need:'ความต้องการ',source:'ที่มา',attribution:'การยืนยันที่มา',status:'สถานะ',note:'ผลติดตาม',next_followup:'นัดถัดไป',sale_value:'ยอดปิดการขาย',owner:'ผู้ดูแล',consent:'ยินยอมให้ติดต่อ',deleted_at:'ย้ายลงถังขยะ'};return '<dl>'+Object.entries(labels).filter(([k])=>row[k]!==undefined).map(([k,label])=>'<dt>'+label+'</dt><dd>'+safe(row[k]??'—')+'</dd>').join('')+'</dl>';}const p=row.payload;if(!p)return '<p>หน้าที่: '+safe(roleLabel[row.role]||row.role)+' · '+(row.active?'เปิดใช้งาน':'ปิดใช้งาน')+'</p>';const fields={title:'ชื่องาน',campaign:'แคมเปญ',caption:'บรีฟ / แคปชัน',owner:'ผู้รับผิดชอบ',channel:'ช่องทาง',date:'วันเผยแพร่'};return '<dl>'+Object.entries(fields).map(([key,label])=>'<dt>'+label+'</dt><dd>'+safe(p[key]||'—')+'</dd>').join('')+'<dt>สถานะ</dt><dd>'+safe(STATUSES[p.status]||'—')+'</dd><dt>ไฟล์แนบ</dt><dd>'+safe((p.files||[]).map(f=>f.name).join(', ')||'—')+'</dd>'+Object.entries({approved:'งบอนุมัติ',spent:'ใช้จริง',views:'ยอดดู',replies:'ตอบกลับ',comments:'คอมเมนต์',clicks:'คลิก'}).map(([key,label])=>'<dt>'+label+'</dt><dd>'+safe(p.ads?.[key]??'—')+'</dd>').join('')+'</dl>';}
+ function clear(){if(q('#initial-password'))q('#initial-password').hidden=true;if(typeof LeadUI!=='undefined')LeadUI.reset();tasks=[];rows=[];people=[];member=null;units=[];q('#view').replaceChildren();document.querySelectorAll('dialog[open]').forEach(d=>d.close());}
+ function snapshot(row){if(!row)return '<p>—</p>';if(row.customer||row.note){const labels={customer:'ลูกค้า',contact:'ช่องทางติดต่อ',need:'ความต้องการ',source:'ที่มา',attribution:'การยืนยันที่มา',status:'สถานะ',note:'ผลติดตาม',next_followup:'นัดถัดไป',sale_value:'ยอดปิดการขาย',owner:'ผู้ดูแล',consent:'ยินยอมให้ติดต่อ',deleted_at:'ย้ายลงถังขยะ'};return '<dl>'+Object.entries(labels).filter(([k])=>row[k]!==undefined).map(([k,label])=>'<dt>'+label+'</dt><dd>'+safe(row[k]??'—')+'</dd>').join('')+'</dl>';}const p=row.payload;if(!p)return '<p>หน้าที่: '+safe(roleLabel[row.role]||row.role)+' · '+(row.active?'เปิดใช้งาน':'ปิดใช้งาน')+'</p>';const fields={title:'ชื่องาน',campaign:'แคมเปญ',caption:'บรีฟ / แคปชัน',owner:'ผู้รับผิดชอบ',channel:'ช่องทาง',date:'วันเผยแพร่',productName:'สินค้าที่ปักตะกร้า',postUrl:'ลิงก์โพสต์จริง',workUrl:'ลิงก์ไฟล์งาน',dueDate:'กำหนดส่งงาน',publishedDate:'วันที่โพสต์จริง',format:'รูปแบบคอนเทนต์',audience:'กลุ่มเป้าหมาย',objective:'เป้าหมายโพสต์',cta:'CTA',relatedUnits:'สาขาที่เกี่ยวข้อง',resultNote:'หมายเหตุผลลัพธ์',contentCode:'รหัสคอนเทนต์',postCode:'รหัสรายการโพสต์'};return '<dl>'+Object.entries(fields).map(([key,label])=>'<dt>'+label+'</dt><dd>'+safe(p[key]||'—')+'</dd>').join('')+'<dt>สถานะ</dt><dd>'+safe(STATUSES[p.status]||'—')+'</dd><dt>ไฟล์แนบ</dt><dd>'+safe((p.files||[]).map(f=>f.name).join(', ')||'—')+'</dd>'+Object.entries({approved:'งบอนุมัติ',spent:'ใช้จริง',views:'ยอดดู',replies:'ตอบกลับ',comments:'คอมเมนต์',clicks:'คลิก'}).map(([key,label])=>'<dt>'+label+'</dt><dd>'+safe(p.ads?.[key]??'—')+'</dd>').join('')+'</dl>';}
  function stamp(d){return new Date(d).toLocaleString('th-TH',{timeZone:'Asia/Bangkok'});}
  async function boot(){
   if(demo){q('#auth-screen').hidden=true;q('#cloud-actions').hidden=true;return false;}
@@ -32,7 +32,7 @@ const KC = (() => {
   q('#close-cloud-panel').onclick=()=>q('#cloud-panel').close();
   q('#trash-task').onclick=async()=>{if(!editing||saving)return;try{await trash(editing.id,editing.version);q('#editor').close();await load();render();toast('ย้ายลงถังขยะแล้ว · กู้คืนได้');}catch(e){q('#form-error').textContent=e.message;}};
   if(!window.supabase){gate('โหลดส่วนเชื่อมต่อไม่สำเร็จ กรุณารีเฟรชหน้า');return true;}
-  client=window.supabase.createClient(url,key);
+  client=window.supabase.createClient(url,key);if(!fileTimer){fileTimer=setInterval(()=>refreshFiles().catch(()=>{}),60000);document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshFiles().catch(()=>{});});}
   client.auth.onAuthStateChange((event,s)=>{session=s;if(event==='PASSWORD_RECOVERY'){recovery=true;gate('ตั้งรหัสผ่านใหม่สำหรับบัญชีของคุณ');q('#auth-form').dataset.mode='recovery';q('#auth-title').textContent='ตั้งรหัสผ่านใหม่';q('#auth-submit').textContent='บันทึกรหัสผ่านใหม่';}else if(event==='SIGNED_OUT'){clear();gate();}});
   try{session=check(await client.auth.getSession()).session;if(session&&!recovery)await enter();else if(!recovery)gate();}catch(e){gate(e.message);}
   return true;
@@ -52,6 +52,7 @@ const KC = (() => {
   if(member.active&&member.must_change_password){await ManagedAccounts.changeInitial(client,enter);return;}
   if(!member.active||member.role==='pending'){clear();gate('ยืนยันตัวตนแล้ว บัญชีนี้กำลังรอผู้ดูแลอนุมัติสิทธิ์ กรุณาเข้าสู่ระบบอีกครั้งหลังอนุมัติ');return;}
   units=check(await client.from('units').select('*').order('bu_id'));
+  try{people=check(await client.from('members').select('user_id,display_name,active').eq('active',true)).filter(p=>p.active);}catch{people=[member];}
   await load();
   q('#auth-screen').hidden=true;q('.app').hidden=false;q('#cloud-actions').hidden=false;
   q('#identity').textContent=member.display_name+' · '+roleLabel[member.role];
@@ -63,7 +64,7 @@ const KC = (() => {
   fillUnitFilter();render();
  }
  async function hydrate(row){const u=units.find(x=>x.id===row.unit_id);const t={...row.payload,id:row.id,bu:u.bu_id,unit:u.name,version:row.version,sample:false,files:[]};
-  for(const f of row.payload.files||[]){if(!f.path)continue;const result=await client.storage.from('kc-files').createSignedUrl(f.path,3600);t.files.push({...f,url:result.data?.signedUrl||''});}
+  for(const f of row.payload.files||[]){if(!f.path)continue;const result=await client.storage.from('kc-files').createSignedUrl(f.path,3600);t.files.push({...f,url:result.data?.signedUrl||'',expiresAt:result.data?.signedUrl?Date.now()+3600000:0});}
   return adDefaults(t);
  }
  async function load(){rows=check(await client.from('content_items').select('*').order('updated_at',{ascending:false}));tasks=await Promise.all(rows.filter(r=>!r.deleted_at).map(hydrate));}
@@ -114,5 +115,8 @@ const KC = (() => {
    document.querySelectorAll('[data-person]').forEach(f=>f.onsubmit=async e=>{e.preventDefault();const role=f.elements.namedItem('role').value,unit=f.elements.namedItem('unit').value;if(role==='branch'&&!unit){toast('เลือกหน่วยย่อยสำหรับบัญชีประจำสาขา');return;}const button=f.querySelector('button');button.disabled=true;try{const saved=check(await client.from('members').update({role,unit_id:role==='branch'?unit:null,active:role!=='pending'&&f.elements.namedItem('active').checked}).eq('user_id',f.dataset.person).select().maybeSingle());if(!saved)throw Error('ไม่สามารถแก้สิทธิ์บัญชีนี้');toast('บันทึกสิทธิ์และประวัติแล้ว');}catch(e){toast(e.message);}finally{button.disabled=false;}});
   }catch(e){q('#cloud-panel-body').textContent=e.message;}
  }
- return {demo,boot,save,editor,scopeUnits,api:()=>client,units:()=>units};
+
+ let refreshingFiles=null;
+ async function refreshFiles(){if(demo||!member?.active||q('.app').hidden)return;if(refreshingFiles)return refreshingFiles;const uid=member.user_id;refreshingFiles=(async()=>{const all=[...tasks.flatMap(t=>t.files||[]),...(q('#editor').open?draftFiles:[])],paths=[...new Set(all.filter(f=>f.path&&(!f.url||!f.expiresAt||f.expiresAt<Date.now()+300000)).map(f=>f.path))];for(const path of paths){const r=await client.storage.from('kc-files').createSignedUrl(path,3600);if(member?.user_id!==uid)return;if(r.error||!r.data?.signedUrl)continue;for(const f of all.filter(f=>f.path===path)){const old=f.url;f.url=r.data.signedUrl;f.expiresAt=Date.now()+3600000;if(old){document.querySelectorAll('img').forEach(img=>{if(img.getAttribute('src')===old){img.src=f.url;img.hidden=false;}});document.querySelectorAll('a').forEach(a=>{if(a.getAttribute('href')===old)a.href=f.url;});}}}})();try{await refreshingFiles;}finally{refreshingFiles=null;}}
+ return {demo,boot,save,editor,scopeUnits,refreshFiles,people:()=>people,api:()=>client,units:()=>units};
 })();
