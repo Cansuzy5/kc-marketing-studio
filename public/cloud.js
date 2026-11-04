@@ -118,5 +118,5 @@ const KC = (() => {
 
  let refreshingFiles=null;
  async function refreshFiles(){if(demo||!member?.active||q('.app').hidden)return;if(refreshingFiles)return refreshingFiles;const uid=member.user_id;refreshingFiles=(async()=>{const all=[...tasks.flatMap(t=>t.files||[]),...(q('#editor').open?draftFiles:[])],paths=[...new Set(all.filter(f=>f.path&&(!f.url||!f.expiresAt||f.expiresAt<Date.now()+300000)).map(f=>f.path))];for(const path of paths){const r=await client.storage.from('kc-files').createSignedUrl(path,3600);if(member?.user_id!==uid)return;if(r.error||!r.data?.signedUrl)continue;for(const f of all.filter(f=>f.path===path)){const old=f.url;f.url=r.data.signedUrl;f.expiresAt=Date.now()+3600000;if(old){document.querySelectorAll('img').forEach(img=>{if(img.getAttribute('src')===old){img.src=f.url;img.hidden=false;}});document.querySelectorAll('a').forEach(a=>{if(a.getAttribute('href')===old)a.href=f.url;});}}}})();try{await refreshingFiles;}finally{refreshingFiles=null;}}
- return {demo,boot,save,editor,scopeUnits,refreshFiles,people:()=>people,api:()=>client,units:()=>units};
+ return {demo,boot,save,editor,scopeUnits,refreshFiles,reloadContent:async()=>{await load();render();},people:()=>people,api:()=>client,units:()=>units};
 })();
