@@ -53,3 +53,9 @@ dialog{border:1px solid var(--border);border-radius:17px;padding:0;color:#253d3d
 .ad-dashboard .ad-banner strong{font-size:18px}
 .ad-dashboard .ad-summary{padding:8px 12px}
 @media(min-width:1100px){.ad-dashboard .ad-stats{grid-template-columns:repeat(6,minmax(0,1fr))}}
+
+.ad-period-filter{display:flex;align-items:end;gap:10px;flex-wrap:wrap;margin:10px 0 6px}
+.ad-period-filter label{display:grid;gap:4px;font-size:12px}
+.ad-period-filter select,.ad-period-filter input{min-height:34px;border:1px solid var(--border);border-radius:8px;background:#fff;color:inherit;padding:5px 9px;font:inherit}
+.ad-period-count{margin:6px 0;font-size:13px}
+.ad-period-count span{margin-inline-start:8px;color:var(--muted)}
