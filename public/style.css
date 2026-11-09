@@ -29,3 +29,13 @@ dialog{border:1px solid var(--border);border-radius:17px;padding:0;color:#253d3d
 .calendar-product{display:block;margin-top:5px;font-size:11px;color:#354f47;font-weight:600}
 .calendar-event small.calendar-bu{display:block;font-size:11px;color:#52685f;margin-top:4px}
 @media(max-width:1000px){.calendar{overflow-x:auto}.calendar-header,.calendar-grid{min-width:840px}.calendar-event{font-size:12px;padding:7px}.calendar-event small.calendar-bu{display:block}}
+
+.related-business{min-width:0}
+.related-business>label{font-weight:600}
+.related-business label{display:flex;align-items:baseline;gap:6px}
+.related-business fieldset{min-width:0;margin:8px 0 0;padding:8px 10px 10px;border:1px solid #d6e1da;border-radius:8px}
+.related-business fieldset label+label{margin-top:5px}
+.related-business legend{padding:0 4px;font-size:.85em;color:#506861}
+.post-channels{margin:-5px 0 14px}
+.post-channels #planner-links:not(:empty){margin:0 0 8px}
+.post-channels #planner-links button{margin:0 6px 5px 0}

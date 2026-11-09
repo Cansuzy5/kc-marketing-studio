@@ -9,15 +9,44 @@ const Planner=(()=>{
  function units(){return typeof KC!=='undefined'&&!KC.demo?KC.units():BUS.flatMap((b,i)=>(b.units.length?b.units:['ระดับ BU']).map(name=>({bu_id:i,name,id:i+'|'+name})));}
  function syncLinkButtons(){for(const key of ['postUrl','workUrl']){const a=document.getElementById('open-'+key);if(!a)continue;const value=field(key).value.trim();try{if(!value)throw Error();safeURL(value);a.href=value;a.hidden=false;}catch{a.hidden=true;a.removeAttribute('href');}}}
  function setup(){
-  const section=document.createElement('section');section.className='planner-fields';section.innerHTML=`<h3>แผนและการเผยแพร่</h3><p class="form-hint">หนึ่งรายการต่อหนึ่งช่องทาง · งานเดียวกันใช้รหัสคอนเทนต์ร่วมกัน · รูปและลิงก์เพิ่มทีหลังได้</p><div class="form-grid">${extras.map(([k,l,type,max])=>`<label class="field">${l}<input name="${k}" type="${type}" ${max?'maxlength="'+max+'"':''}></label>`).join('')}</div><div id="planner-links"></div><button type="button" class="secondary" id="planner-channel">＋ เพิ่มโพสต์อีกช่องทางจากงานนี้</button>`;
+  const section=document.createElement('section');section.className='planner-fields';section.innerHTML=`<h3>แผนและการเผยแพร่</h3><p class="form-hint">แต่ละช่องทางมีวันลง แคปชัน ลิงก์ และผลตอบรับของตัวเอง · รูปและลิงก์เพิ่มทีหลังได้</p><div class="form-grid">${extras.filter(([k])=>k!=='relatedUnits').map(([k,l,type,max])=>`<label class="field">${l}<input name="${k}" type="${type}" ${max?'maxlength="'+max+'"':''}></label>`).join('')}</div><div id="planner-links"></div><button type="button" class="secondary" id="planner-channel">＋ เพิ่มโพสต์อีกช่องทางจากงานนี้</button>`;
   document.querySelector('.editor-main').insertBefore(section,document.querySelector('.upload-area'));
+  const channels=document.createElement('div');
+  channels.className='post-channels';
+  channels.append(section.querySelector('#planner-links'),section.querySelector('#planner-channel'));
+  field('channel').closest('label').after(channels);
   for(const [key,label]of [['postUrl','เปิดโพสต์จริง ↗'],['workUrl','เปิดไฟล์งาน ↗']]){const a=document.createElement('a');a.id='open-'+key;a.className='planner-link-open';a.target='_blank';a.rel='noopener noreferrer';a.textContent=label;a.hidden=true;field(key).setAttribute('aria-label',key==='postUrl'?'ลิงก์โพสต์จริง':'ลิงก์ไฟล์งาน');field(key).after(a);field(key).addEventListener('input',syncLinkButtons);field(key).addEventListener('change',syncLinkButtons);}
-  document.querySelector('#planner-channel').onclick=()=>{if(!editing){toast('บันทึกงานแรกก่อน แล้วเพิ่มช่องทางได้');return;}const old=editing;if(openEditor()===false)return;for(const k of ['title','campaign','caption','owner'])field(k).value=old[k]||'';if(typeof EditorCare!=='undefined'){EditorCare.owners(old.owner);}field('bu').value=old.bu;editorUnits(old.unit);if(typeof KC!=='undefined')KC.scopeUnits();loadRelatedBus(old);for(const [k]of extras)if(!['postCode','postUrl','publishedDate','resultNote'].includes(k))field(k).value=old[k]||'';field('contentCode').value=old.contentCode||old.id;field('postCode').value='POST-'+crypto.randomUUID();draftFiles=structuredClone(old.files);renderFiles();syncLinkButtons();toast('เลือกช่องทางและวันลงใหม่ แล้วบันทึก');};
+  document.querySelector('#planner-channel').onclick=()=>{
+   if(!editing){toast('บันทึกงานแรกก่อน แล้วเพิ่มช่องทางได้');return;}
+   const old=editing,source=scopeSource(old)||old;
+   const used=new Set(tasks.filter(t=>contentKey(t)===contentKey(old)).map(t=>t.channel));
+   if(openEditor()===false)return;
+   for(const k of ['title','campaign','caption'])field(k).value=old[k]||'';
+   if(typeof EditorCare!=='undefined')EditorCare.owners(old.owner);
+   else field('owner').value=old.owner||'';
+   field('bu').value=source.bu;
+   editorUnits(source.unit);
+   if(typeof KC!=='undefined')KC.scopeUnits();
+   field('date').value=old.date;
+   const available=[...field('channel').options].find(option=>!used.has(option.value));
+   field('channel').value=available?.value||old.channel;
+   for(const [k]of extras)if(!['relatedUnits','postCode','postUrl','publishedDate','resultNote'].includes(k))field(k).value=old[k]||'';
+   field('contentCode').value=contentKey(old);
+   draftScopeSource=source.id;
+   loadRelatedBus({...source,id:null,contentCode:contentKey(old),scopeSourceId:source.id});
+   $('#editor-title').textContent='เพิ่มโพสต์อีกช่องทาง';
+   draftFiles=structuredClone(old.files);
+   renderFiles();
+   syncLinkButtons();
+   field('channel').focus();
+   toast('ใช้วันลงเดิมได้ ตรวจช่องทางแล้วกดบันทึก');
+  };
   const button=document.createElement('button');button.id='import-plan';button.className='secondary';button.textContent='↑ นำเข้า Excel';document.querySelector('#add-task').before(button);button.onclick=openImport;
   const dialog=document.createElement('dialog');dialog.id='planner-import';dialog.innerHTML=`<div class="dialog-head"><h2>นำเข้าแผนคอนเทนต์</h2><button id="close-import" class="icon-button" aria-label="ปิด">×</button></div><div class="planner-import-body"><a href="KC_Content_Planner_Template.xlsx" download class="secondary">ดาวน์โหลดแม่แบบ Excel</a><p>1 แถว = 1 โพสต์ต่อช่องทาง · รูปและลิงก์เพิ่มภายหลังได้ · ไม่แก้ยอด Ads หรือ Lead</p><label class="field">ไฟล์ .xlsx ไม่เกิน 5 MB<input id="planner-file" type="file" accept=".xlsx"></label><div id="planner-mapping"></div><div id="planner-preview"></div><p id="planner-error" role="alert"></p><p id="planner-progress" role="status"></p></div>`;document.body.append(dialog);dialog.addEventListener('cancel',e=>{if(busy)e.preventDefault();});document.querySelector('#close-import').onclick=()=>{if(!busy)dialog.close();};document.querySelector('#planner-file').onchange=readFile;if(typeof ContentTransfer!=='undefined')ContentTransfer.setup();
  }
- function load(t){for(const [k]of extras)field(k).value=t?.[k]||'';syncLinkButtons();field('contentCode').value=t?.contentCode||t?.id||'KC-'+crypto.randomUUID();field('postCode').value=t?.postCode||t?.id||'POST-'+crypto.randomUUID();document.querySelector('#planner-channel').hidden=!t;const sib=t?tasks.filter(x=>x.id!==t.id&&(x.contentCode||x.id)===(t.contentCode||t.id)):[];document.querySelector('#planner-links').innerHTML=sib.length?'<p>โพสต์ในคอนเทนต์เดียวกัน</p>'+sib.map(x=>`<button class="secondary" type="button" data-sibling="${esc(x.id)}">${esc(x.channel)} · ${esc(x.date)}</button>`).join(''):'';document.querySelectorAll('[data-sibling]').forEach(b=>b.onclick=()=>openEditor(b.dataset.sibling));}
- function read(){const data=Object.fromEntries(extras.map(([k])=>[k,field(k).value.trim()]));for(const k of ['workUrl','postUrl'])safeURL(data[k]);if(!data.contentCode||!data.postCode)throw Error('ระบุรหัสคอนเทนต์และรหัสรายการโพสต์');if(tasks.some(t=>t.id!==editing?.id&&(t.postCode||t.id)===data.postCode))throw Error('รหัสรายการโพสต์ซ้ำกับงานเดิม');return data;}
+ let draftScopeSource;
+ function load(t){draftScopeSource=t?.scopeSourceId;for(const [k]of extras)if(k!=='relatedUnits')field(k).value=t?.[k]||'';syncLinkButtons();field('contentCode').value=t?.contentCode||t?.id||'KC-'+crypto.randomUUID();field('postCode').value=t?.postCode||t?.id||'POST-'+crypto.randomUUID();document.querySelector('#planner-channel').hidden=!t;const sib=t?tasks.filter(x=>x.id!==t.id&&contentKey(x)===contentKey(t)):[];document.querySelector('#planner-links').innerHTML=sib.length?'<p>โพสต์ในคอนเทนต์เดียวกัน</p>'+sib.map(x=>`<button class="secondary" type="button" data-sibling="${esc(x.id)}">${esc(x.channel)} · ${esc(x.date)}</button>`).join(''):'';document.querySelectorAll('[data-sibling]').forEach(b=>b.onclick=()=>openEditor(b.dataset.sibling));}
+ function read(){const data=Object.fromEntries(extras.filter(([k])=>k!=='relatedUnits').map(([k])=>[k,field(k).value.trim()]));const source=tasks.find(t=>t.id===draftScopeSource);data.scopeSourceId=source&&contentKey(source)!==data.contentCode?null:draftScopeSource||null;for(const k of ['workUrl','postUrl'])safeURL(data[k]);if(!data.contentCode||!data.postCode)throw Error('ระบุรหัสคอนเทนต์และรหัสรายการโพสต์');if(tasks.some(t=>t.id!==editing?.id&&(t.postCode||t.id)===data.postCode))throw Error('รหัสรายการโพสต์ซ้ำกับงานเดิม');return data;}
  let raw=[],headers=[],mapping={},date1904=false,filename='',batch=[],busy=false;
  const q=s=>document.querySelector(s);
  function openImport(){if(saving||readingFiles)return;q('#planner-import').showModal();}
