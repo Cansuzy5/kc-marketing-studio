@@ -5,7 +5,7 @@ const ContentGallery=(()=>{
  function openDraft(files,selected,title){setup();photos=files.filter(f=>f.type?.startsWith('image/')&&f.url);index=photos.indexOf(files[selected]);if(index<0)return;task={title:title||'รูปที่แนบ'};paint();dialog.showModal();}
  function paint(){const f=photos[index];$('#gallery-edit').hidden=!task.id;$('#gallery-title').textContent=task.title;$('#gallery-count').textContent=`ภาพ ${index+1} / ${photos.length}`;$('#gallery-name').textContent=f.name||'';$('#gallery-error').hidden=true;const img=$('#gallery-image');img.hidden=false;img.alt=f.name||task.title;img.src=f.url;$('#gallery-prev').disabled=index===0;$('#gallery-next').disabled=index===photos.length-1;}
  function change(delta){const next=index+delta;if(next<0||next>=photos.length)return;index=next;paint();}
- async function open(id){if(typeof KC!=="undefined"&&!KC.demo&&KC.refreshFiles)await KC.refreshFiles().catch(()=>{});task=tasks.find(t=>t.id===id);if(!task)return;photos=(task.files||[]).filter(f=>f.type?.startsWith('image/')&&f.url);if(!photos.length){openEditor(id);return;}setup();index=0;paint();dialog.showModal();}
- function bind(){document.querySelectorAll('[data-gallery]').forEach(b=>b.onclick=()=>open(b.dataset.gallery));}
+ async function open(id,fileIndex){if(typeof KC!=="undefined"&&!KC.demo&&KC.refreshFiles)await KC.refreshFiles().catch(()=>{});task=tasks.find(t=>t.id===id);if(!task)return;photos=(task.files||[]).filter(f=>f.type?.startsWith('image/')&&f.url);if(!photos.length){openEditor(id);return;}setup();index=Math.max(0,photos.indexOf(task.files?.[fileIndex]));paint();dialog.showModal();}
+ function bind(){document.querySelectorAll('[data-gallery]').forEach(b=>b.onclick=()=>open(b.dataset.gallery,b.dataset.galleryFile));}
  return {open,openDraft,bind};
 })();
