@@ -20,10 +20,43 @@ const KC = (() => {
    const user=check(await client.auth.getUser()).user;if(!user||user.id!==member?.user_id)throw Error('กรุณาเข้าสู่ระบบใหม่');
    if(!dialog.open||q('#cloud-panel-title').textContent!=='โปรไฟล์ของฉัน')return;
    body.innerHTML='<form id="my-profile-form"><label class="field">ชื่อที่แสดงในโปรไฟล์<input name="profileName" required maxlength="200" autocomplete="name"></label><p class="form-hint">ใช้กับโปรไฟล์ของคุณในหน้านี้ ชื่อในรายชื่อทีมจัดการแยกต่างหาก</p><p role="status" id="my-profile-message"></p><button class="primary" type="submit">บันทึกโปรไฟล์</button></form>';
+   bindProfileCredentials(body,user);
    const form=q('#my-profile-form'),input=form.elements.namedItem('profileName'),button=form.querySelector('button'),message=q('#my-profile-message');
    input.value=(typeof user.user_metadata?.profile_display_name==='string'&&user.user_metadata.profile_display_name.trim())||member.display_name;
    form.onsubmit=async e=>{e.preventDefault();if(button.disabled)return;const name=input.value.trim();if(!name){message.textContent='กรุณาระบุชื่อที่แสดง';return;}button.disabled=true;message.textContent='กำลังบันทึก…';try{const saved=check(await client.auth.updateUser({data:{profile_display_name:name}})).user;if(saved?.id===member?.user_id)showIdentity(saved);message.textContent='บันทึกโปรไฟล์แล้ว';}catch(err){message.textContent=err.message;}finally{button.disabled=false;}};
   }catch(e){if(dialog.open&&q('#cloud-panel-title').textContent==='โปรไฟล์ของฉัน')body.textContent=e.message;}
+ }
+ function bindProfileCredentials(body,user){
+  const email=user.email||'',managed=!email||/@users\.kc\.invalid$/i.test(email);
+  body.insertAdjacentHTML('beforeend',`<hr><details><summary>เปลี่ยนอีเมล</summary>${managed?'<p class="form-hint">บัญชีนี้ใช้ชื่อผู้ใช้เข้าสู่ระบบ หากต้องการเปลี่ยนเป็นบัญชีอีเมล ให้ติดต่อผู้ดูแล</p>':'<form id="profile-email-form"><p class="form-hint">ทำตามลิงก์ยืนยันที่ระบบส่งให้ก่อนใช้อีเมลใหม่เข้าสู่ระบบ</p><label class="field">อีเมลใหม่<input type="email" name="email" required maxlength="254" autocomplete="email"></label><p role="status"></p><button class="primary">ขอเปลี่ยนอีเมล</button></form>'}</details><hr><details><summary>เปลี่ยนรหัสผ่าน</summary><form id="profile-password-form"><label class="field">รหัสผ่านใหม่<input type="password" name="password" required minlength="12" maxlength="72" autocomplete="new-password"></label><label class="field">ยืนยันรหัสผ่านใหม่<input type="password" name="confirm" required minlength="12" maxlength="72" autocomplete="new-password"></label>${managed?'':'<div hidden data-password-verification><p class="form-hint">ระบบต้องยืนยันตัวตนอีกครั้ง ขอรหัสทางอีเมลแล้วกรอกก่อนบันทึก</p><button type="button" class="secondary" data-send-code>ส่งรหัสยืนยัน</button><label class="field">รหัสยืนยัน<input name="nonce" autocomplete="one-time-code" inputmode="numeric"></label></div>'}<p role="status"></p><button class="primary" type="submit">บันทึกรหัสผ่านใหม่</button></form></details>`);
+  const handle=(form,button,action)=>async e=>{
+   e.preventDefault();if(button.disabled)return;
+   const status=form.querySelector('[role="status"]');button.disabled=true;
+   try{const current=check(await client.auth.getUser()).user;if(current?.id!==user.id||member?.user_id!==user.id)throw Error('กรุณาเข้าสู่ระบบใหม่');await action(form,status);}
+   catch(err){status.textContent=err.message;}
+   finally{button.disabled=false;}
+  };
+  const ef=body.querySelector('#profile-email-form');
+  if(ef)ef.onsubmit=handle(ef,ef.querySelector('button'),async(form,status)=>{
+   const next=form.elements.email.value.trim().toLowerCase();
+   if(next===email.toLowerCase()||/@users\.kc\.invalid$/i.test(next))throw Error('กรุณาใช้อีเมลใหม่ที่รับข้อความได้');
+   check(await client.auth.updateUser({email:next},{emailRedirectTo:location.origin+'/'}));
+   form.reset();status.textContent='ส่งคำขอแล้ว กรุณาตรวจอีเมลเดิมและอีเมลใหม่ แล้วทำตามลิงก์ยืนยันที่ได้รับ';
+  });
+  const pf=body.querySelector('#profile-password-form'),verify=pf.querySelector('[data-password-verification]'),send=pf.querySelector('[data-send-code]');
+  if(send)send.onclick=handle(pf,send,async(_,status)=>{check(await client.auth.reauthenticate());status.textContent='ส่งรหัสยืนยันแล้ว กรุณาตรวจอีเมล';});
+  pf.onsubmit=handle(pf,pf.querySelector('[type="submit"]'),async(form,status)=>{
+   const password=form.elements.password.value,nonce=form.elements.nonce?.value.trim();
+   if(password!==form.elements.confirm.value)throw Error('รหัสผ่านทั้งสองช่องไม่ตรงกัน');
+   if(password.length<12||new TextEncoder().encode(password).length>72)throw Error('ใช้รหัสผ่านอย่างน้อย 12 ตัวอักษร และไม่เกิน 72 ไบต์');
+   if(verify&&!verify.hidden&&!nonce)throw Error('กรุณากรอกรหัสยืนยันก่อนบันทึก');
+   const result=await client.auth.updateUser(nonce?{password,nonce}:{password});
+   if(result.error&&['reauthentication_needed','reauthentication_not_valid'].includes(result.error.code)){
+    if(!verify)throw Error('กรุณาออกจากระบบแล้วเข้าสู่ระบบใหม่ก่อนเปลี่ยนรหัสผ่าน');
+    verify.hidden=false;throw Error('กรุณายืนยันตัวตนด้วยรหัสทางอีเมลก่อนเปลี่ยนรหัสผ่าน');
+   }
+   check(result);form.reset();if(verify)verify.hidden=true;status.textContent='เปลี่ยนรหัสผ่านแล้ว';
+  });
  }
  function stamp(d){return new Date(d).toLocaleString('th-TH',{timeZone:'Asia/Bangkok'});}
  async function boot(){
