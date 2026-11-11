@@ -11,6 +11,20 @@ const KC = (() => {
  function gate(message='') {q('.app').hidden=true;q('#auth-screen').hidden=false;q('#auth-message').textContent=message;}
  function clear(){if(q('#initial-password'))q('#initial-password').hidden=true;if(typeof LeadUI!=='undefined')LeadUI.reset();tasks=[];rows=[];people=[];member=null;units=[];q('#view').replaceChildren();document.querySelectorAll('dialog[open]').forEach(d=>d.close());}
  function snapshot(row){if(!row)return '<p>—</p>';if(row.customer||row.note){const labels={customer:'ลูกค้า',contact:'ช่องทางติดต่อ',need:'ความต้องการ',source:'ที่มา',attribution:'การยืนยันที่มา',status:'สถานะ',note:'ผลติดตาม',next_followup:'นัดถัดไป',sale_value:'ยอดปิดการขาย',owner:'ผู้ดูแล',consent:'ยินยอมให้ติดต่อ',deleted_at:'ย้ายลงถังขยะ'};return '<dl>'+Object.entries(labels).filter(([k])=>row[k]!==undefined).map(([k,label])=>'<dt>'+label+'</dt><dd>'+safe(row[k]??'—')+'</dd>').join('')+'</dl>';}const p=row.payload;if(!p)return '<p>หน้าที่: '+safe(roleLabel[row.role]||row.role)+' · '+(row.active?'เปิดใช้งาน':'ปิดใช้งาน')+'</p>';const fields={title:'ชื่องาน',campaign:'แคมเปญ',caption:'บรีฟ / แคปชัน',owner:'ผู้รับผิดชอบ',channel:'ช่องทาง',date:'วันเผยแพร่',productName:'สินค้าที่ปักตะกร้า',postUrl:'ลิงก์โพสต์จริง',workUrl:'ลิงก์ไฟล์งาน',dueDate:'กำหนดส่งงาน',publishedDate:'วันที่โพสต์จริง',format:'รูปแบบคอนเทนต์',audience:'กลุ่มเป้าหมาย',objective:'เป้าหมายโพสต์',cta:'CTA',relatedUnits:'สาขาที่เกี่ยวข้อง',resultNote:'หมายเหตุผลลัพธ์',contentCode:'รหัสคอนเทนต์',postCode:'รหัสรายการโพสต์'};return '<dl>'+Object.entries(fields).map(([key,label])=>'<dt>'+label+'</dt><dd>'+safe(p[key]||'—')+'</dd>').join('')+'<dt>สถานะ</dt><dd>'+safe(STATUSES[p.status]||'—')+'</dd><dt>ไฟล์แนบ</dt><dd>'+safe((p.files||[]).map(f=>f.name).join(', ')||'—')+'</dd>'+Object.entries({approved:'งบอนุมัติ',spent:'ใช้จริง',views:'ยอดดู',replies:'ตอบกลับ',comments:'คอมเมนต์',clicks:'คลิก'}).map(([key,label])=>'<dt>'+label+'</dt><dd>'+safe(p.ads?.[key]??'—')+'</dd>').join('')+'</dl>';}
+ function showIdentity(user){const name=typeof user?.user_metadata?.profile_display_name==='string'?user.user_metadata.profile_display_name.trim().slice(0,200):'';const label=name||member.display_name;q('#identity').textContent=label+' · '+roleLabel[member.role];const menuName=q('#account-menu-name');if(menuName)menuName.textContent=label;}
+ async function editProfile(){
+  if(!member?.active)return;
+  const dialog=q('#cloud-panel'),body=q('#cloud-panel-body');
+  q('#cloud-panel-title').textContent='โปรไฟล์ของฉัน';body.textContent='กำลังโหลด…';dialog.showModal();
+  try{
+   const user=check(await client.auth.getUser()).user;if(!user||user.id!==member?.user_id)throw Error('กรุณาเข้าสู่ระบบใหม่');
+   if(!dialog.open||q('#cloud-panel-title').textContent!=='โปรไฟล์ของฉัน')return;
+   body.innerHTML='<form id="my-profile-form"><label class="field">ชื่อที่แสดงในโปรไฟล์<input name="profileName" required maxlength="200" autocomplete="name"></label><p class="form-hint">ใช้กับโปรไฟล์ของคุณในหน้านี้ ชื่อในรายชื่อทีมจัดการแยกต่างหาก</p><p role="status" id="my-profile-message"></p><button class="primary" type="submit">บันทึกโปรไฟล์</button></form>';
+   const form=q('#my-profile-form'),input=form.elements.namedItem('profileName'),button=form.querySelector('button'),message=q('#my-profile-message');
+   input.value=(typeof user.user_metadata?.profile_display_name==='string'&&user.user_metadata.profile_display_name.trim())||member.display_name;
+   form.onsubmit=async e=>{e.preventDefault();if(button.disabled)return;const name=input.value.trim();if(!name){message.textContent='กรุณาระบุชื่อที่แสดง';return;}button.disabled=true;message.textContent='กำลังบันทึก…';try{const saved=check(await client.auth.updateUser({data:{profile_display_name:name}})).user;if(saved?.id===member?.user_id)showIdentity(saved);message.textContent='บันทึกโปรไฟล์แล้ว';}catch(err){message.textContent=err.message;}finally{button.disabled=false;}};
+  }catch(e){if(dialog.open&&q('#cloud-panel-title').textContent==='โปรไฟล์ของฉัน')body.textContent=e.message;}
+ }
  function stamp(d){return new Date(d).toLocaleString('th-TH',{timeZone:'Asia/Bangkok'});}
  async function boot(){
   if(demo){q('#auth-screen').hidden=true;q('#cloud-actions').hidden=true;return false;}
@@ -28,7 +42,14 @@ const KC = (() => {
   q('#forgot').onclick=async()=>{try{const email=q('#auth-email').value.trim();if(!email.includes('@'))throw Error('บัญชีชื่อผู้ใช้ไม่มีอีเมลกู้รหัส กรุณาติดต่อผู้ดูแล');if(!email)throw Error('กรอกอีเมลก่อนครับ');check(await client.auth.resetPasswordForEmail(email,{redirectTo:location.origin+'/'}));q('#auth-message').textContent='หากอีเมลนี้ใช้งานได้ ระบบจะส่งลิงก์ตั้งรหัสผ่านให้ กรุณาตรวจกล่องจดหมาย';}catch(e){q('#auth-message').textContent=e.message;}};
   q('#signout').onclick=async()=>{const result=await client.auth.signOut();if(result.error){toast(result.error.message);return;}clear();gate();};
   q('#refresh-cloud').onclick=async()=>{try{await enter();toast('โหลดข้อมูลล่าสุดแล้ว');}catch(e){toast(e.message);}};
-  q('#history-btn').onclick=()=>panel('history');q('#trash-btn').onclick=()=>panel('trash');q('#members-btn').onclick=()=>panel('members');
+  q('#history-btn').onclick=()=>panel('history');q('#trash-btn').onclick=()=>panel('trash');q('#members-btn').textContent='จัดการบัญชี';q('#members-btn').onclick=()=>panel('members');
+  const avatar=q('.top-right .avatar'),menu=document.createElement('details');menu.className='account-menu';
+  menu.innerHTML='<summary class="avatar" aria-label="เมนูบัญชี">KC</summary><div class="account-popover"><div class="account-menu-heading"><small>KC WORKSPACE</small><strong id="account-menu-name"></strong></div><button type="button" id="profile-btn">โปรไฟล์ของฉัน <span aria-hidden="true">↗</span></button></div>';
+  avatar.replaceWith(menu);
+  const membersButton=q('#members-btn');membersButton.className='';membersButton.textContent='จัดการบัญชีทีม';menu.querySelector('.account-popover').append(membersButton);
+  q('#profile-btn').onclick=()=>{menu.open=false;editProfile();};membersButton.onclick=()=>{menu.open=false;panel('members');};
+  document.addEventListener('click',e=>{if(!menu.contains(e.target))menu.open=false;});
+  menu.addEventListener('keydown',e=>{if(e.key==='Escape'&&menu.open){menu.open=false;menu.querySelector('summary').focus();}});
   q('#close-cloud-panel').onclick=()=>q('#cloud-panel').close();
   q('#trash-task').onclick=async()=>{if(!editing||saving)return;try{await trash(editing.id,editing.version);q('#editor').close();await load();render();toast('ย้ายลงถังขยะแล้ว · กู้คืนได้');}catch(e){q('#form-error').textContent=e.message;}};
   if(!window.supabase){gate('โหลดส่วนเชื่อมต่อไม่สำเร็จ กรุณารีเฟรชหน้า');return true;}
@@ -55,7 +76,7 @@ const KC = (() => {
   try{people=check(await client.from('members').select('user_id,display_name,active').eq('active',true)).filter(p=>p.active);}catch{people=[member];}
   await load();
   q('#auth-screen').hidden=true;q('.app').hidden=false;q('#cloud-actions').hidden=false;
-  q('#identity').textContent=member.display_name+' · '+roleLabel[member.role];
+  showIdentity(user);
   q('#history-btn').hidden=!['admin','marketing'].includes(member.role);q('#members-btn').hidden=member.role!=='admin';
   const allowed=new Set(units.map(u=>String(u.bu_id)));
   document.querySelectorAll('[data-bu]').forEach(b=>b.hidden=!allowed.has(b.dataset.bu));
@@ -95,7 +116,7 @@ const KC = (() => {
   editorUnits(editing?.unit);scopeUnits();
  }
  function scopeUnits(){if(demo||!member)return;[...field('unit').options].forEach(o=>o.disabled=!units.some(u=>u.bu_id===Number(field('bu').value)&&u.name===o.value));if(field('unit').selectedOptions[0]?.disabled)field('unit').value=[...field('unit').options].find(o=>!o.disabled)?.value||'';}
- async function panel(kind){q('#cloud-panel').showModal();q('#cloud-panel-body').textContent='กำลังโหลด…';q('#cloud-panel-title').textContent={history:'ประวัติการเปลี่ยนแปลง',trash:'ถังขยะ · กู้คืนงาน',members:'สมาชิกและสิทธิ์'}[kind];
+ async function panel(kind){if(kind==='members'&&member?.role!=='admin')return;if(!q('#cloud-panel').open)q('#cloud-panel').showModal();q('#cloud-panel-body').textContent='กำลังโหลด…';q('#cloud-panel-title').textContent={history:'ประวัติการเปลี่ยนแปลง',trash:'ถังขยะ · กู้คืนงาน',members:'จัดการบัญชีทีม'}[kind];
   try{let html='';
    if(kind==='history'){
     const logs=check(await client.from('audit_log').select('*').order('happened_at',{ascending:false}).limit(200));
@@ -107,12 +128,18 @@ const KC = (() => {
    }else{
     check(await client.rpc('sync_pending_members'));
     const people=check(await client.from('members').select('*').order('created_at'));
-    html=ManagedAccounts.markup(units)+'<p>สมาชิกใหม่จะปรากฏหลังยืนยันอีเมลแล้ว เปิดหน้านี้อีกครั้งเพื่อโหลดรายชื่อใหม่ เลือกหน้าที่และติ๊กเปิดใช้งานก่อนบันทึก บัญชีประจำสาขาเห็นเฉพาะหน่วยย่อยที่กำหนด</p>'+people.map(m=>`<form class="member-row" data-person="${m.user_id}"><b>${safe(m.display_name)}</b><small>${safe(m.username||m.email)}${m.must_change_password?' · ต้องเปลี่ยนรหัสผ่านครั้งแรก':''}</small><label>หน้าที่<select name="role">${Object.entries(roleLabel).map(([r,label])=>`<option value="${r}" ${m.role===r?'selected':''}>${label}</option>`).join('')}</select></label><label>หน่วยย่อย<select name="unit"><option value="">ทุกหน่วย (ผู้ดูแล/การตลาด)</option>${units.map(u=>`<option value="${u.id}" ${u.id===m.unit_id?'selected':''}>${safe(BUS[u.bu_id].short+' · '+u.name)}</option>`).join('')}</select></label><label><input type="checkbox" name="active" ${m.active?'checked':''}>เปิดใช้งาน</label><button class="primary" ${m.user_id===member.user_id?'disabled':''}>บันทึกสิทธิ์</button></form>`).join('');
+    html=ManagedAccounts.markup(units)+'<p>สมาชิกใหม่จะปรากฏหลังยืนยันอีเมลแล้ว เปิดหน้านี้อีกครั้งเพื่อโหลดรายชื่อใหม่ เลือกหน้าที่และสิทธิ์ก่อนบันทึก การปิดบัญชีจะตัดสิทธิ์ใช้งานและเก็บประวัติงานไว้ บัญชีประจำสาขาเห็นเฉพาะหน่วยย่อยที่กำหนด</p>'+people.map(m=>`<form class="member-row" data-person="${m.user_id}"><b>${safe(m.display_name)}</b><small>${safe(m.username||m.email)}${m.must_change_password?' · ต้องเปลี่ยนรหัสผ่านครั้งแรก':''}</small><label>หน้าที่<select name="role">${Object.entries(roleLabel).map(([r,label])=>`<option value="${r}" ${m.role===r?'selected':''}>${label}</option>`).join('')}</select></label><label>หน่วยย่อย<select name="unit"><option value="">ทุกหน่วย (ผู้ดูแล/การตลาด)</option>${units.map(u=>`<option value="${u.id}" ${u.id===m.unit_id?'selected':''}>${safe(BUS[u.bu_id].short+' · '+u.name)}</option>`).join('')}</select></label><label><input type="checkbox" name="active" ${m.active?'checked':''}>เปิดใช้งาน</label><button class="primary" ${m.user_id===member.user_id?'disabled':''}>บันทึกสิทธิ์</button>${m.active&&m.user_id!==member.user_id?'<button type="button" class="secondary" data-disable-account>ปิดบัญชี</button>':''}</form>`).join('');
    }
    q('#cloud-panel-body').innerHTML=html;
    if(kind==='members')ManagedAccounts.bind(client,()=>panel('members'));
    document.querySelectorAll('[data-restore]').forEach(b=>b.onclick=async()=>{b.disabled=true;try{await trash(b.dataset.restore,Number(b.dataset.version),true);await load();render();await panel('trash');toast('กู้คืนงานแล้ว');}catch(e){toast(e.message);b.disabled=false;}});
-   document.querySelectorAll('[data-person]').forEach(f=>f.onsubmit=async e=>{e.preventDefault();const role=f.elements.namedItem('role').value,unit=f.elements.namedItem('unit').value;if(role==='branch'&&!unit){toast('เลือกหน่วยย่อยสำหรับบัญชีประจำสาขา');return;}const button=f.querySelector('button');button.disabled=true;try{const saved=check(await client.from('members').update({role,unit_id:role==='branch'?unit:null,active:role!=='pending'&&f.elements.namedItem('active').checked}).eq('user_id',f.dataset.person).select().maybeSingle());if(!saved)throw Error('ไม่สามารถแก้สิทธิ์บัญชีนี้');toast('บันทึกสิทธิ์และประวัติแล้ว');}catch(e){toast(e.message);}finally{button.disabled=false;}});
+   q('#cloud-panel-body').querySelectorAll('[data-disable-account]').forEach(button=>button.onclick=async()=>{
+    const form=button.closest('[data-person]'),id=form.dataset.person;
+    if(member?.role!=='admin'||id===member.user_id||!confirm('ปิดบัญชี '+form.querySelector('b').textContent+'? บัญชีจะเข้าใช้งานไม่ได้ แต่ยังเก็บประวัติงานไว้'))return;
+    const controls=[...form.elements].filter(el=>!el.disabled);controls.forEach(el=>el.disabled=true);
+    try{const saved=check(await client.from('members').update({active:false}).eq('user_id',id).select().maybeSingle());if(!saved)throw Error('ปิดบัญชีไม่สำเร็จ');if(q('#cloud-panel').open&&q('#cloud-panel-title').textContent==='จัดการบัญชีทีม')await panel('members');toast('ปิดบัญชีแล้ว');}catch(e){toast(e.message);}finally{controls.forEach(el=>el.disabled=false);}
+   });
+   document.querySelectorAll('[data-person]').forEach(f=>f.onsubmit=async e=>{e.preventDefault();if(member?.role!=='admin'||f.dataset.person===member.user_id)return;const role=f.elements.namedItem('role').value,unit=f.elements.namedItem('unit').value;if(role==='branch'&&!unit){toast('เลือกหน่วยย่อยสำหรับบัญชีประจำสาขา');return;}const button=f.querySelector('button');button.disabled=true;try{const saved=check(await client.from('members').update({role,unit_id:role==='branch'?unit:null,active:role!=='pending'&&f.elements.namedItem('active').checked}).eq('user_id',f.dataset.person).select().maybeSingle());if(!saved)throw Error('ไม่สามารถแก้สิทธิ์บัญชีนี้');toast('บันทึกสิทธิ์และประวัติแล้ว');}catch(e){toast(e.message);}finally{button.disabled=false;}});
   }catch(e){q('#cloud-panel-body').textContent=e.message;}
  }
 
