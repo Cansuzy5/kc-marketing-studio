@@ -1,12 +1,18 @@
 'use strict';
 const ORGANIC_FIELDS=[['views','ยอดดู'],['replies','ตอบกลับ'],['comments','คอมเมนต์'],['clicks','คลิก']];
+const ORGANIC_REACH_FIELDS=[ORGANIC_FIELDS[0],['viewers','ผู้ชม','คน']];
+const ORGANIC_ENGAGEMENT_FIELDS=[['reactions','ความรู้สึก'],ORGANIC_FIELDS[3],ORGANIC_FIELDS[2],['shares','แชร์']];
+const ORGANIC_EDITOR_FIELDS=[...ORGANIC_REACH_FIELDS,...ORGANIC_ENGAGEMENT_FIELDS,ORGANIC_FIELDS[1]];
+function organicInputs(fields){return fields.map(([k,label,unit='ครั้ง'])=>`<label class="field">${label} (${unit})<input name="organic_${k}" type="number" min="0" max="999999999999" step="1" placeholder="ยังไม่รายงาน"></label>`).join('');}
+function updateOrganicEngagement(){const values=ORGANIC_ENGAGEMENT_FIELDS.map(([k])=>field('organic_'+k).valueAsNumber);document.querySelector('#organic-editor-engagement').textContent=adFormat(values.every(adNumber)?values.reduce((sum,n)=>sum+n,0):null);}
 function setupOrganicEditor(){
  const section=document.createElement('section');section.className='ad-editor';
- section.innerHTML=`<h3>ผลตอบรับทั่วไป · ไม่เสียค่าโฆษณา</h3><p class="form-hint">กรอกได้แม้ไม่ยิง Ads · ใช้ยอด Organic จากช่องทางของคอนเทนต์นี้เท่านั้น ไม่รวมยอดโฆษณา หากแยกยอดไม่ได้ให้เว้นว่างเพื่อไม่ให้นับซ้ำ</p><label class="field">ข้อมูลทั่วไปสะสมถึงวันที่<input name="organicUpdated" type="date"></label><div class="form-grid">${ORGANIC_FIELDS.map(([k,label])=>`<label class="field">${label} (ครั้ง)<input name="organic_${k}" type="number" min="0" max="999999999999" step="1" placeholder="ยังไม่รายงาน"></label>`).join('')}</div><p class="form-hint">เว้นว่าง = ยังไม่รายงาน · 0 = วัดแล้วไม่มีผลตอบรับ · ยอดสะสม ไม่ใช่คนไม่ซ้ำ</p>`;
+ section.innerHTML=`<h3>ผลตอบรับทั่วไป · ไม่เสียค่าโฆษณา</h3><p class="form-hint">กรอกได้แม้ไม่ยิง Ads · ใช้ยอด Organic จากช่องทางของคอนเทนต์นี้เท่านั้น ไม่รวมยอดโฆษณา หากแยกยอดไม่ได้ให้เว้นว่างเพื่อไม่ให้นับซ้ำ</p><label class="field">ข้อมูลทั่วไปสะสมถึงวันที่<input name="organicUpdated" type="date"></label><div class="form-grid">${organicInputs(ORGANIC_REACH_FIELDS)}</div><h4>การมีส่วนร่วม</h4><div class="form-grid">${organicInputs(ORGANIC_ENGAGEMENT_FIELDS)}</div><p class="editor-note">Engagement: <output id="organic-editor-engagement" aria-live="polite">—</output> · ความรู้สึก + คลิก + คอมเมนต์ + แชร์</p><p class="form-hint">กรอกครบ 4 ช่องเพื่อแสดงยอดรวม หากวัดแล้วไม่มีให้กรอก 0</p><div class="form-grid">${organicInputs([ORGANIC_FIELDS[1]])}</div><p class="form-hint">เว้นว่าง = ยังไม่รายงาน · 0 = วัดแล้วไม่มีผลตอบรับ</p>`;
  document.querySelector('.editor-main').append(section);
+ ORGANIC_ENGAGEMENT_FIELDS.forEach(([k])=>field('organic_'+k).addEventListener('input',updateOrganicEngagement));
 }
-function loadOrganicForm(t){field('organicUpdated').value=t?.organic?.updated||'';ORGANIC_FIELDS.forEach(([k])=>field('organic_'+k).value=t?.organic?.[k]??'');}
-function readOrganicForm(){return {updated:field('organicUpdated').value,...Object.fromEntries(ORGANIC_FIELDS.map(([k])=>[k,field('organic_'+k).value===''?null:Number(field('organic_'+k).value)]))};}
+function loadOrganicForm(t){field('organicUpdated').value=t?.organic?.updated||'';ORGANIC_EDITOR_FIELDS.forEach(([k])=>field('organic_'+k).value=t?.organic?.[k]??'');updateOrganicEngagement();}
+function readOrganicForm(){return {updated:field('organicUpdated').value,...Object.fromEntries(ORGANIC_EDITOR_FIELDS.map(([k])=>[k,field('organic_'+k).value===''?null:Number(field('organic_'+k).value)]))};}
 function resultDetails(id,label,body){
  const open=document.getElementById(id)?.open?' open':'';
  return `<details class="result-details" id="${id}"${open}><summary>${label}</summary><div class="result-details-body">${body}</div></details>`;
