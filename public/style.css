@@ -71,4 +71,6 @@ dialog{border:1px solid var(--border);border-radius:17px;padding:0;color:#253d3d
 .home-dashboard .content-card .bu-dot{background:var(--calendar-bu-edge,#778987)}
 .home-dashboard .home-post .calendar-status{margin-top:2px}
 
-.home-post-meta{display:flex;align-items:center;flex-wrap:wrap;gap:4px;margin-bottom:4px}.home-post .home-post-meta .calendar-status,.calendar-event .calendar-event-meta .calendar-status{display:inline-flex;align-items:center;width:max-content;max-width:100%;padding:2px 5px;margin:0;border:1px solid color-mix(in srgb,var(--status-edge,#7b8490) 25%,transparent);border-radius:5px;background:var(--status-bg,#eceef1);font-size:10px;line-height:1.35}.home-post-meta .calendar-status::before,.calendar-event-meta .calendar-status::before{width:5px;height:5px}
+.home-post .calendar-status,.calendar-event .calendar-event-meta .calendar-status{display:inline-flex;align-items:center;width:max-content;max-width:100%;padding:2px 5px;margin:0;border:1px solid color-mix(in srgb,var(--status-edge,#7b8490) 25%,transparent);border-radius:5px;background:var(--status-bg,#eceef1);font-size:10px;line-height:1.35}.home-post .calendar-status::before,.calendar-event-meta .calendar-status::before{width:5px;height:5px}
+
+.home-post .calendar-status{margin-top:4px}
