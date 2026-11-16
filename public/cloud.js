@@ -131,12 +131,15 @@ const KC = (() => {
  }
  let backfilling=false;
  function canBackfillThumbnails(){return !demo&&member?.active&&member.role==='admin';}
- async function backfillThumbnails(){
+ async function backfillThumbnails(onProgress=()=>{}){
   if(!canBackfillThumbnails()||backfilling)throw Error('ใช้ได้เฉพาะผู้ดูแล และทำได้ครั้งละหนึ่งชุด');
-  backfilling=true;const userId=member.user_id;let made=0,small=0,failed=0,budget=5;
+  backfilling=true;const userId=member.user_id;let made=0,small=0,failed=0,attempted=0,skipped=0;
+  const seen=new Set();
   const active=()=>canBackfillThumbnails()&&member.user_id===userId;
   try{
    const bucket=client.storage.from('kc-files');
+   while(active()){
+   let budget=5;
    for(const row of [...rows]){
     if(!budget||!active())break;
     if(row.deleted_at)continue;
@@ -144,8 +147,8 @@ const KC = (() => {
     let changed=0;
     for(const file of files){
      if(!budget||!active())break;
-     if(!file.path?.startsWith(row.unit_id+'/')||file.thumbPath||file.smallPreview||file.previewSkipped||!/^image\/(jpeg|png|webp|gif)$/.test(file.type))continue;
-     budget--;
+     if(seen.has(file.path)||!file.path?.startsWith(row.unit_id+'/')||file.thumbPath||file.smallPreview||file.previewSkipped||!/^image\/(jpeg|png|webp|gif)$/.test(file.type))continue;
+     budget--;attempted++;seen.add(file.path);
      try{
       const blob=check(await bucket.download(file.path));
       if(!active())break;
@@ -153,7 +156,7 @@ const KC = (() => {
       if(!active())break;
       if(thumb){const path=file.path+'.'+crypto.randomUUID()+'.preview.webp';check(await bucket.upload(path,thumb,{contentType:'image/webp',upsert:false}));file.thumbPath=path;}
       else if(blob.size<=48*1024)file.smallPreview=true;
-      else file.previewSkipped=true;
+      else{file.previewSkipped=true;skipped++;}
       changed++;
      }catch{failed++;}
     }
@@ -168,7 +171,11 @@ const KC = (() => {
      small+=files.filter((f,i)=>f.smallPreview&&!row.payload.files[i].smallPreview).length;
     }catch{failed+=changed;}
    }
-   return {made,small,failed,attempted:5-budget};
+   onProgress({made,small,failed,attempted,skipped});
+   if(budget===5)break;
+   await new Promise(resolve=>setTimeout(resolve,0));
+   }
+   return {made,small,failed,attempted,skipped};
   }finally{backfilling=false;}
  }
  async function hydrate(row){const u=units.find(x=>x.id===row.unit_id);const t={...row.payload,id:row.id,bu:u.bu_id,unit:u.name,version:row.version,sample:false,files:[]};
