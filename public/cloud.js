@@ -117,8 +117,69 @@ const KC = (() => {
   const hash=location.hash.slice(1);if(['overview','content','calendar','library','ads','results','leads'].includes(hash))view=hash;
   fillUnitFilter();render();
  }
+ async function makeThumbnail(blob){
+  if(!/^image\/(jpeg|png|webp|gif)$/.test(blob.type))return null;
+  const url=URL.createObjectURL(blob);
+  try{
+   const img=new Image();img.src=url;await img.decode();
+   const scale=Math.min(1,480/Math.max(img.naturalWidth,img.naturalHeight));
+   const canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(img.naturalWidth*scale));canvas.height=Math.max(1,Math.round(img.naturalHeight*scale));
+   const ctx=canvas.getContext('2d');if(!ctx)return null;ctx.drawImage(img,0,0,canvas.width,canvas.height);
+   const thumb=await new Promise(resolve=>canvas.toBlob(resolve,'image/webp',0.74));
+   return thumb&&thumb.type==='image/webp'&&thumb.size<blob.size?thumb:null;
+  }finally{URL.revokeObjectURL(url);}
+ }
+ let backfilling=false;
+ function canBackfillThumbnails(){return !demo&&member?.active&&member.role==='admin';}
+ async function backfillThumbnails(onProgress=()=>{}){
+  if(!canBackfillThumbnails()||backfilling)throw Error('ใช้ได้เฉพาะผู้ดูแล และทำได้ครั้งละหนึ่งชุด');
+  backfilling=true;const userId=member.user_id;let made=0,small=0,failed=0,attempted=0,skipped=0;
+  const seen=new Set();
+  const active=()=>canBackfillThumbnails()&&member.user_id===userId;
+  try{
+   const bucket=client.storage.from('kc-files');
+   while(active()){
+   let budget=5;
+   for(const row of [...rows]){
+    if(!budget||!active())break;
+    if(row.deleted_at)continue;
+    const files=(row.payload.files||[]).map(f=>({...f}));
+    let changed=0;
+    for(const file of files){
+     if(!budget||!active())break;
+     if(seen.has(file.path)||!file.path?.startsWith(row.unit_id+'/')||file.thumbPath||file.smallPreview||file.previewSkipped||!/^image\/(jpeg|png|webp|gif)$/.test(file.type))continue;
+     budget--;attempted++;seen.add(file.path);
+     try{
+      const blob=check(await bucket.download(file.path));
+      if(!active())break;
+      const thumb=await makeThumbnail(blob);
+      if(!active())break;
+      if(thumb){const path=file.path+'.'+crypto.randomUUID()+'.preview.webp';check(await bucket.upload(path,thumb,{contentType:'image/webp',upsert:false}));file.thumbPath=path;}
+      else if(blob.size<=48*1024)file.smallPreview=true;
+      else{file.previewSkipped=true;skipped++;}
+      changed++;
+     }catch{failed++;}
+    }
+    if(!changed||!active())continue;
+    try{
+     const saved=check(await client.from('content_items').update({payload:{...row.payload,files}}).eq('id',row.id).eq('version',row.version).is('deleted_at',null).select().maybeSingle());
+     if(!saved)throw Error('งานเปลี่ยนระหว่างประมวลผล');
+     rows=rows.map(r=>r.id===saved.id?saved:r);
+     const old=tasks.find(t=>t.id===saved.id);
+     if(old&&active())Object.assign(old,await hydrate(saved));
+     made+=files.filter((f,i)=>f.thumbPath&&!row.payload.files[i].thumbPath).length;
+     small+=files.filter((f,i)=>f.smallPreview&&!row.payload.files[i].smallPreview).length;
+    }catch{failed+=changed;}
+   }
+   onProgress({made,small,failed,attempted,skipped});
+   if(budget===5)break;
+   await new Promise(resolve=>setTimeout(resolve,0));
+   }
+   return {made,small,failed,attempted,skipped};
+  }finally{backfilling=false;}
+ }
  async function hydrate(row){const u=units.find(x=>x.id===row.unit_id);const t={...row.payload,id:row.id,bu:u.bu_id,unit:u.name,version:row.version,sample:false,files:[]};
-  for(const f of row.payload.files||[]){if(!f.path)continue;const result=await client.storage.from('kc-files').createSignedUrl(f.path,3600);t.files.push({...f,url:result.data?.signedUrl||'',expiresAt:result.data?.signedUrl?Date.now()+3600000:0});}
+  for(const f of row.payload.files||[]){if(!f.path)continue;const result=await client.storage.from('kc-files').createSignedUrl(f.path,3600);const thumb=f.thumbPath?await client.storage.from('kc-files').createSignedUrl(f.thumbPath,3600):null;t.files.push({...f,url:result.data?.signedUrl||'',expiresAt:result.data?.signedUrl?Date.now()+3600000:0,thumbUrl:thumb?.data?.signedUrl||'',thumbExpiresAt:thumb?.data?.signedUrl?Date.now()+3600000:0});}
   return adDefaults(t);
  }
  async function load(){rows=check(await client.from('content_items').select('*').order('updated_at',{ascending:false}));tasks=await Promise.all(rows.filter(r=>!r.deleted_at).map(hydrate));}
@@ -130,10 +191,12 @@ const KC = (() => {
   if(!u)throw Error('บัญชีนี้ไม่มีสิทธิ์บันทึกในหน่วยงานที่เลือก');
   const files=[];
   for(const f of t.files){
-   if(f.path&&f.path.startsWith(u.id+'/')){files.push({name:f.name,type:f.type,path:f.path});continue;}
+   if(f.path&&f.path.startsWith(u.id+'/')){files.push({name:f.name,type:f.type,path:f.path,...(typeof f.thumbPath==='string'&&f.thumbPath.startsWith(f.path+'.')&&f.thumbPath.endsWith('.preview.webp') || f.thumbPath===f.path+'.preview.webp'?{thumbPath:f.thumbPath}:{}),...(f.smallPreview===true?{smallPreview:true}:{}),...(f.previewSkipped===true?{previewSkipped:true}:{})});continue;}
    if(f.stock)continue;
    const blob=await (await fetch(f.url)).blob();const path=u.id+'/'+t.id+'/'+crypto.randomUUID();
-   check(await client.storage.from('kc-files').upload(path,blob,{contentType:f.type,upsert:false}));files.push({name:f.name,type:f.type,path});
+   check(await client.storage.from('kc-files').upload(path,blob,{contentType:f.type,upsert:false}));
+   const file={name:f.name,type:f.type,path};files.push(file);
+   try{const thumb=await makeThumbnail(blob);if(thumb){const thumbPath=path+'.preview.webp';check(await client.storage.from('kc-files').upload(thumbPath,thumb,{contentType:'image/webp',upsert:false}));file.thumbPath=thumbPath;}else if(f.type.startsWith('image/')&&blob.size<=48*1024)file.smallPreview=true;}catch{/* Original is still available in the gallery. */}
   }
   const payload={...t,files};delete payload.id;delete payload.version;delete payload.bu;delete payload.unit;delete payload.sample;
   let result;
@@ -177,6 +240,6 @@ const KC = (() => {
  }
 
  let refreshingFiles=null;
- async function refreshFiles(){if(demo||!member?.active||q('.app').hidden)return;if(refreshingFiles)return refreshingFiles;const uid=member.user_id;refreshingFiles=(async()=>{const all=[...tasks.flatMap(t=>t.files||[]),...(q('#editor').open?draftFiles:[])],paths=[...new Set(all.filter(f=>f.path&&(!f.url||!f.expiresAt||f.expiresAt<Date.now()+300000)).map(f=>f.path))];for(const path of paths){const r=await client.storage.from('kc-files').createSignedUrl(path,3600);if(member?.user_id!==uid)return;if(r.error||!r.data?.signedUrl)continue;for(const f of all.filter(f=>f.path===path)){const old=f.url;f.url=r.data.signedUrl;f.expiresAt=Date.now()+3600000;if(old){document.querySelectorAll('img').forEach(img=>{if(img.getAttribute('src')===old){img.src=f.url;img.hidden=false;}});document.querySelectorAll('a').forEach(a=>{if(a.getAttribute('href')===old)a.href=f.url;});}}}})();try{await refreshingFiles;}finally{refreshingFiles=null;}}
- return {demo,boot,save,editor,scopeUnits,refreshFiles,reloadContent:async()=>{await load();render();},people:()=>people,api:()=>client,units:()=>units};
+ async function refreshFiles(){if(demo||!member?.active||q('.app').hidden)return;if(refreshingFiles)return refreshingFiles;const uid=member.user_id;refreshingFiles=(async()=>{const all=[...tasks.flatMap(t=>t.files||[]),...(q('#editor').open?draftFiles:[])],refs=all.flatMap(f=>[{f,path:f.path,url:'url',expiry:'expiresAt'},{f,path:f.thumbPath,url:'thumbUrl',expiry:'thumbExpiresAt'}]).filter(r=>r.path),paths=[...new Set(refs.filter(r=>!r.f[r.url]||r.f[r.expiry]<Date.now()+300000).map(r=>r.path))];for(const path of paths){const r=await client.storage.from('kc-files').createSignedUrl(path,3600);if(member?.user_id!==uid)return;if(r.error||!r.data?.signedUrl)continue;for(const {f,url,expiry} of refs.filter(x=>x.path===path)){const old=f[url];f[url]=r.data.signedUrl;f[expiry]=Date.now()+3600000;if(old){document.querySelectorAll('img').forEach(img=>{if(img.getAttribute('src')===old){img.src=f[url];img.hidden=false;}});document.querySelectorAll('a').forEach(a=>{if(a.getAttribute('href')===old)a.href=f[url];});}}}})();try{await refreshingFiles;}finally{refreshingFiles=null;}}
+ return {demo,boot,save,editor,canBackfillThumbnails,backfillThumbnails,scopeUnits,refreshFiles,reloadContent:async()=>{await load();render();},people:()=>people,api:()=>client,units:()=>units};
 })();
