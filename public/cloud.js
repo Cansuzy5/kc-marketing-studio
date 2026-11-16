@@ -129,6 +129,48 @@ const KC = (() => {
    return thumb&&thumb.type==='image/webp'&&thumb.size<blob.size?thumb:null;
   }finally{URL.revokeObjectURL(url);}
  }
+ let backfilling=false;
+ function canBackfillThumbnails(){return !demo&&member?.active&&member.role==='admin';}
+ async function backfillThumbnails(){
+  if(!canBackfillThumbnails()||backfilling)throw Error('ใช้ได้เฉพาะผู้ดูแล และทำได้ครั้งละหนึ่งชุด');
+  backfilling=true;const userId=member.user_id;let made=0,small=0,failed=0,budget=5;
+  const active=()=>canBackfillThumbnails()&&member.user_id===userId;
+  try{
+   const bucket=client.storage.from('kc-files');
+   for(const row of [...rows]){
+    if(!budget||!active())break;
+    if(row.deleted_at)continue;
+    const files=(row.payload.files||[]).map(f=>({...f}));
+    let changed=0;
+    for(const file of files){
+     if(!budget||!active())break;
+     if(!file.path?.startsWith(row.unit_id+'/')||file.thumbPath||file.smallPreview||file.previewSkipped||!/^image\/(jpeg|png|webp|gif)$/.test(file.type))continue;
+     budget--;
+     try{
+      const blob=check(await bucket.download(file.path));
+      if(!active())break;
+      const thumb=await makeThumbnail(blob);
+      if(!active())break;
+      if(thumb){const path=file.path+'.'+crypto.randomUUID()+'.preview.webp';check(await bucket.upload(path,thumb,{contentType:'image/webp',upsert:false}));file.thumbPath=path;}
+      else if(blob.size<=48*1024)file.smallPreview=true;
+      else file.previewSkipped=true;
+      changed++;
+     }catch{failed++;}
+    }
+    if(!changed||!active())continue;
+    try{
+     const saved=check(await client.from('content_items').update({payload:{...row.payload,files}}).eq('id',row.id).eq('version',row.version).is('deleted_at',null).select().maybeSingle());
+     if(!saved)throw Error('งานเปลี่ยนระหว่างประมวลผล');
+     rows=rows.map(r=>r.id===saved.id?saved:r);
+     const old=tasks.find(t=>t.id===saved.id);
+     if(old&&active())Object.assign(old,await hydrate(saved));
+     made+=files.filter((f,i)=>f.thumbPath&&!row.payload.files[i].thumbPath).length;
+     small+=files.filter((f,i)=>f.smallPreview&&!row.payload.files[i].smallPreview).length;
+    }catch{failed+=changed;}
+   }
+   return {made,small,failed,attempted:5-budget};
+  }finally{backfilling=false;}
+ }
  async function hydrate(row){const u=units.find(x=>x.id===row.unit_id);const t={...row.payload,id:row.id,bu:u.bu_id,unit:u.name,version:row.version,sample:false,files:[]};
   for(const f of row.payload.files||[]){if(!f.path)continue;const result=await client.storage.from('kc-files').createSignedUrl(f.path,3600);const thumb=f.thumbPath?await client.storage.from('kc-files').createSignedUrl(f.thumbPath,3600):null;t.files.push({...f,url:result.data?.signedUrl||'',expiresAt:result.data?.signedUrl?Date.now()+3600000:0,thumbUrl:thumb?.data?.signedUrl||'',thumbExpiresAt:thumb?.data?.signedUrl?Date.now()+3600000:0});}
   return adDefaults(t);
@@ -142,7 +184,7 @@ const KC = (() => {
   if(!u)throw Error('บัญชีนี้ไม่มีสิทธิ์บันทึกในหน่วยงานที่เลือก');
   const files=[];
   for(const f of t.files){
-   if(f.path&&f.path.startsWith(u.id+'/')){files.push({name:f.name,type:f.type,path:f.path,...(f.thumbPath===f.path+'.preview.webp'?{thumbPath:f.thumbPath}:{}),...(f.smallPreview===true?{smallPreview:true}:{})});continue;}
+   if(f.path&&f.path.startsWith(u.id+'/')){files.push({name:f.name,type:f.type,path:f.path,...(typeof f.thumbPath==='string'&&f.thumbPath.startsWith(f.path+'.')&&f.thumbPath.endsWith('.preview.webp') || f.thumbPath===f.path+'.preview.webp'?{thumbPath:f.thumbPath}:{}),...(f.smallPreview===true?{smallPreview:true}:{}),...(f.previewSkipped===true?{previewSkipped:true}:{})});continue;}
    if(f.stock)continue;
    const blob=await (await fetch(f.url)).blob();const path=u.id+'/'+t.id+'/'+crypto.randomUUID();
    check(await client.storage.from('kc-files').upload(path,blob,{contentType:f.type,upsert:false}));
@@ -192,5 +234,5 @@ const KC = (() => {
 
  let refreshingFiles=null;
  async function refreshFiles(){if(demo||!member?.active||q('.app').hidden)return;if(refreshingFiles)return refreshingFiles;const uid=member.user_id;refreshingFiles=(async()=>{const all=[...tasks.flatMap(t=>t.files||[]),...(q('#editor').open?draftFiles:[])],refs=all.flatMap(f=>[{f,path:f.path,url:'url',expiry:'expiresAt'},{f,path:f.thumbPath,url:'thumbUrl',expiry:'thumbExpiresAt'}]).filter(r=>r.path),paths=[...new Set(refs.filter(r=>!r.f[r.url]||r.f[r.expiry]<Date.now()+300000).map(r=>r.path))];for(const path of paths){const r=await client.storage.from('kc-files').createSignedUrl(path,3600);if(member?.user_id!==uid)return;if(r.error||!r.data?.signedUrl)continue;for(const {f,url,expiry} of refs.filter(x=>x.path===path)){const old=f[url];f[url]=r.data.signedUrl;f[expiry]=Date.now()+3600000;if(old){document.querySelectorAll('img').forEach(img=>{if(img.getAttribute('src')===old){img.src=f[url];img.hidden=false;}});document.querySelectorAll('a').forEach(a=>{if(a.getAttribute('href')===old)a.href=f[url];});}}}})();try{await refreshingFiles;}finally{refreshingFiles=null;}}
- return {demo,boot,save,editor,scopeUnits,refreshFiles,reloadContent:async()=>{await load();render();},people:()=>people,api:()=>client,units:()=>units};
+ return {demo,boot,save,editor,canBackfillThumbnails,backfillThumbnails,scopeUnits,refreshFiles,reloadContent:async()=>{await load();render();},people:()=>people,api:()=>client,units:()=>units};
 })();
